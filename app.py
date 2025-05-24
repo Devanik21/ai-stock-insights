@@ -7,7 +7,7 @@ import google.generativeai as genai
 from typing import Optional, Dict, Any
 
 # Page config
-st.set_page_config(page_title="📈 Stock Market Storyteller", layout="wide")
+st.set_page_config(page_title="Stock Market Storyteller", page_icon="📈",layout="wide")
 st.title("📈 Stock Market Storyteller")
 st.write("Narrate your favorite stocks with technical indicators & Gemini-powered summaries!")
 
@@ -217,6 +217,35 @@ if ticker:
                 st.warning("Not enough data to generate a summary after calculating indicators.")
         else:
             st.info("Enter a valid Gemini API key in the sidebar to get AI summaries.")
+
+        # --- Placeholder for New Tools ---
+        st.subheader("🛠️ Additional Analysis Tools")
+
+        with st.expander("📊 Volume Analysis"):
+            st.write("Detailed volume chart and analysis will be shown here.")
+            # Placeholder: You could add a volume bar chart using data_with_indicators['Volume']
+            if 'Volume' in data_with_indicators.columns:
+                st.bar_chart(data_with_indicators['Volume'])
+            else:
+                st.info("Volume data not available for this selection.")
+
+        with st.expander("📈 Volatility Insights (e.g., Bollinger Bands)"):
+            st.write("Bollinger Bands and other volatility metrics will be displayed here.")
+            st.info("Feature coming soon!")
+
+        with st.expander("💰 Dividend Information"):
+            st.write("Dividend history and yield will be shown here.")
+            # Placeholder: stock_info = yf.Ticker(ticker).info; st.write(stock_info.get('dividendYield'))
+            st.info("Feature coming soon! (May require additional data fetching)")
+
+        with st.expander("🧾 Key Financial Ratios"):
+            st.write("P/E Ratio, EPS, and other fundamental ratios will be displayed here.")
+            # Placeholder: stock_info = yf.Ticker(ticker).info; st.write(stock_info.get('trailingPE'))
+            st.info("Feature coming soon! (May require additional data fetching)")
+
+        with st.expander("📰 Recent News Headlines"):
+            st.write("Latest news articles related to the stock will be summarized or linked here.")
+            st.info("Feature coming soon! (May require news API integration)")
 
         st.subheader("📥 Download Processed Data")
         csv_data = data_with_indicators.to_csv().encode('utf-8')
