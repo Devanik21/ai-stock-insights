@@ -3,84 +3,156 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import datetime
-import numpy as np
 import google.generativeai as genai
+from typing import Optional, Dict, Any
 
 # Page config
 st.set_page_config(page_title="📈 Stock Market Storyteller", layout="wide")
 st.title("📈 Stock Market Storyteller")
 st.write("Narrate your favorite stocks with technical indicators & Gemini-powered summaries!")
 
+# --- Constants ---
+SMA_SHORT_WINDOW = 20
+SMA_LONG_WINDOW = 50
+RSI_WINDOW = 14
+MACD_FAST_PERIOD = 12
+MACD_SLOW_PERIOD = 26
+MACD_SIGNAL_PERIOD = 9
+GEMINI_MODEL_NAME = "gemini-2.0-flash" # Or "gemini-1.5-flash", "gemini-pro"
+
 # Sidebar for Gemini API key
+model: Optional[genai.GenerativeModel] = None
 gemini_api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
 if gemini_api_key:
-    genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    try:
+        genai.configure(api_key=gemini_api_key)
+        model = genai.GenerativeModel(GEMINI_MODEL_NAME)
+        st.sidebar.success("Gemini AI configured successfully!")
+    except Exception as e:
+        st.sidebar.error(f"Failed to configure Gemini: {e}")
+        model = None
+else:
+    st.sidebar.info("Enter your Gemini API key to enable AI-powered summaries.")
 
 # Sidebar stock selection
 st.sidebar.header("📦 Stock Settings")
 ticker = st.sidebar.text_input("Enter Stock Ticker (e.g. AAPL)", value="AAPL")
 period = st.sidebar.selectbox("Select Data Period", ["1mo", "3mo", "6mo", "1y", "2y"], index=2)
-interval = st.sidebar.selectbox("Select Interval", ["1d", "1h", "15m"])
+interval = st.sidebar.selectbox("Select Interval", ["1d", "1wk", "1mo", "1h", "15m"], index=0) # Added more intervals
 
 # Fetch stock data
 @st.cache_data
-def load_data(ticker, period, interval):
-    data = yf.download(ticker, period=period, interval=interval)
-    # Flatten MultiIndex columns if present (yfinance can return multi-level for Single Ticker)
+def load_data(ticker_symbol: str, data_period: str, data_interval: str) -> pd.DataFrame:
+    """Fetches stock data from Yahoo Finance and flattens MultiIndex columns."""
+    try:
+        data = yf.download(ticker_symbol, period=data_period, interval=data_interval, progress=False)
+        if data.empty:
+            st.warning(f"No data found for ticker {ticker_symbol} with period {data_period} and interval {data_interval}.")
+            return pd.DataFrame()
+
+        # Flatten MultiIndex columns if present (yfinance can return multi-level for Single Ticker)
         if isinstance(data.columns, pd.MultiIndex):
-        # If MultiIndex (e.g., first level is field, second is ticker), take the first level
-        data.columns = data.columns.get_level_values(0)
-    data.dropna(inplace=True)
-    return data
+            data.columns = data.columns.get_level_values(0)
+        
+        if 'Close' not in data.columns:
+            st.error(f"'Close' column not found in data for {ticker_symbol}.")
+            return pd.DataFrame()
+            
+        data.dropna(inplace=True) # Drop rows with any NaN values in essential OCHLV columns
+        return data
+    except Exception as e:
+        st.error(f"Error loading data for {ticker_symbol}: {e}")
+        return pd.DataFrame()
+
+def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculates and adds technical indicators to the DataFrame."""
+    data_ti = df.copy()
+    if 'Close' not in data_ti.columns:
+        st.error("Cannot calculate indicators: 'Close' column missing.")
+        return data_ti # Return original or empty if 'Close' is critical
+
+    # Moving Averages
+    data_ti[f'SMA_{SMA_SHORT_WINDOW}'] = data_ti['Close'].rolling(window=SMA_SHORT_WINDOW).mean()
+    data_ti[f'SMA_{SMA_LONG_WINDOW}'] = data_ti['Close'].rolling(window=SMA_LONG_WINDOW).mean()
+    
+    # RSI calculation
+    delta = data_ti['Close'].diff()
+    gain = delta.where(delta > 0, 0.0)
+    loss = -delta.where(delta < 0, 0.0)
+    
+    avg_gain = gain.rolling(window=RSI_WINDOW, min_periods=1).mean() # Use min_periods=1 to get values earlier
+    avg_loss = loss.rolling(window=RSI_WINDOW, min_periods=1).mean()
+    
+    rs = avg_gain / avg_loss
+    data_ti['RSI'] = 100.0 - (100.0 / (1.0 + rs))
+    data_ti['RSI'].fillna(50, inplace=True) # Fill initial NaNs with neutral 50, or handle as preferred
+
+    # MACD calculation
+    exp1 = data_ti['Close'].ewm(span=MACD_FAST_PERIOD, adjust=False).mean()
+    exp2 = data_ti['Close'].ewm(span=MACD_SLOW_PERIOD, adjust=False).mean()
+    data_ti['MACD'] = exp1 - exp2
+    data_ti['MACD_signal'] = data_ti['MACD'].ewm(span=MACD_SIGNAL_PERIOD, adjust=False).mean()
+    return data_ti
+
+def generate_gemini_summary(ai_model: genai.GenerativeModel, stock_ticker: str, latest_data: pd.Series) -> str:
+    """Generates a stock summary using the Gemini AI model."""
+    prompt_data = {key: f"{value:.2f}" if isinstance(value, float) else str(value) for key, value in latest_data.items()}
+    
+    summary_prompt = f"""
+    Analyze the following latest technical indicator data for {stock_ticker}:
+    Close Price: {prompt_data.get('Close', 'N/A')}
+    SMA {SMA_SHORT_WINDOW}-day: {prompt_data.get(f'SMA_{SMA_SHORT_WINDOW}', 'N/A')}
+    SMA {SMA_LONG_WINDOW}-day: {prompt_data.get(f'SMA_{SMA_LONG_WINDOW}', 'N/A')}
+    RSI ({RSI_WINDOW}-day): {prompt_data.get('RSI', 'N/A')}
+    MACD: {prompt_data.get('MACD', 'N/A')}
+    MACD Signal: {prompt_data.get('MACD_signal', 'N/A')}
+
+    Provide a concise, easy-to-understand summary for an investor. What might these indicators suggest about the stock's current situation and potential short-term outlook? Focus on interpretation, not just restating values.
+    """
+    try:
+        response = ai_model.generate_content(summary_prompt)
+        return response.text
+    except Exception as e:
+        return f"Gemini error: An error occurred while generating the summary - {str(e)}"
 
 if ticker:
-    data = load_data(ticker, period, interval)
+    stock_data_raw = load_data(ticker, period, interval)
 
-    st.subheader(f"📊 Price Chart for {ticker}")
-    st.line_chart(data['Close'])
+    if not stock_data_raw.empty and 'Close' in stock_data_raw.columns:
+        st.subheader(f"📊 Price Chart for {ticker}")
+        st.line_chart(stock_data_raw['Close'])
 
-    st.subheader("📉 Technical Indicators")
-    # Moving Averages
-    data['SMA_20'] = data['Close'].rolling(window=20).mean()
-    data['SMA_50'] = data['Close'].rolling(window=50).mean()
-    # RSI calculation
-    delta = data['Close'].diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
-    avg_gain = gain.rolling(window=14).mean()
-    avg_loss = loss.rolling(window=14).mean()
-    rs = avg_gain / avg_loss
-    data['RSI'] = 100 - (100 / (1 + rs))
-    # MACD calculation
-    exp1 = data['Close'].ewm(span=12, adjust=False).mean()
-    exp2 = data['Close'].ewm(span=26, adjust=False).mean()
-    data['MACD'] = exp1 - exp2
-    data['MACD_signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
+        data_with_indicators = calculate_technical_indicators(stock_data_raw)
 
-    # Plot indicators
-    st.line_chart(data[['Close', 'SMA_20', 'SMA_50']])
-    st.line_chart(data[['RSI']])
-    st.line_chart(data[['MACD', 'MACD_signal']])
+        st.subheader("📉 Technical Indicators")
+        # Plot indicators
+        st.line_chart(data_with_indicators[['Close', f'SMA_{SMA_SHORT_WINDOW}', f'SMA_{SMA_LONG_WINDOW}']])
+        st.line_chart(data_with_indicators[['RSI']])
+        st.line_chart(data_with_indicators[['MACD', 'MACD_signal']])
 
-    st.subheader("🧠 Gemini-Powered Summary")
-    if gemini_api_key:
-        latest = data.iloc[-1]
-        summary_prompt = f"""
-        The current stock price of {ticker} is {latest['Close']:.2f}.
-        The 20-day SMA is {latest['SMA_20']:.2f} and 50-day SMA is {latest['SMA_50']:.2f}.
-        RSI is {latest['RSI']:.2f}, MACD is {latest['MACD']:.2f}, and MACD signal is {latest['MACD_signal']:.2f}.
+        st.subheader("🧠 Gemini-Powered Summary")
+        if model: # Check if model was successfully initialized
+            if not data_with_indicators.empty:
+                latest_indicators = data_with_indicators.iloc[-1]
+                summary_text = generate_gemini_summary(model, ticker, latest_indicators)
+                if "Gemini error:" in summary_text:
+                    st.error(summary_text)
+                else:
+                    st.markdown(summary_text) # Use markdown for better formatting from Gemini
+            else:
+                st.warning("Not enough data to generate a summary after calculating indicators.")
+        else:
+            st.info("Enter a valid Gemini API key in the sidebar to get AI summaries.")
 
-        Please provide a simple, friendly summary of what this might mean for investors.
-        """
-        try:
-            response = model.generate_content(summary_prompt)
-            st.success(response.text)
-        except Exception as e:
-            st.error("Gemini error: " + str(e))
+        st.subheader("📥 Download Processed Data")
+        csv_data = data_with_indicators.to_csv().encode('utf-8')
+        st.download_button(
+            label="Download CSV with Indicators",
+            data=csv_data,
+            file_name=f"{ticker}_data_with_indicators.csv",
+            mime='text/csv',
+        )
     else:
-        st.info("Enter your Gemini API key in the sidebar to get AI summaries.")
-
-    st.subheader("📥 Download Processed Data")
-    st.download_button("Download CSV", data.to_csv().encode(), file_name=f"{ticker}_indicators.csv")
+        st.info(f"Could not retrieve or process data for {ticker}. Please check the ticker symbol and selected period/interval.")
+else:
+    st.info("Enter a stock ticker in the sidebar to get started.")
