@@ -5,3 +5,4 @@ numpy
 matplotlib
 google-generativeai
 scikit-learn
+statsmodels
