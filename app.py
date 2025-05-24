@@ -10,7 +10,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures # For Polynomial Regression
 from sklearn.pipeline import make_pipeline # For Polynomial Regression
 import numpy as np # For numerical operations
- 
+import matplotlib.pyplot as plt # Import matplotlib
 # Page config
 st.set_page_config(page_title="📈 Stock Market Storyteller",  page_icon="📈",layout="wide")
 st.title("📈 Stock Market Storyteller 🚀")
