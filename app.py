@@ -415,6 +415,95 @@ if ticker:
             else:
                 st.info("Historical performance summary data could not be fetched.")
 
+        # --- 10 NEW FEATURES BELOW ---
+
+        with st.expander("🌍 Sector & Industry Info"):
+            if stock_info:
+                st.write(f"**Sector:** {stock_info.get('sector', 'N/A')}")
+                st.write(f"**Industry:** {stock_info.get('industry', 'N/A')}")
+            else:
+                st.info("Sector and industry information not available.")
+
+        with st.expander("🕰️ Intraday Price Range"):
+            if not stock_data_raw.empty and 'High' in stock_data_raw.columns and 'Low' in stock_data_raw.columns:
+                st.metric("Day High", f"${stock_data_raw['High'].iloc[-1]:.2f}")
+                st.metric("Day Low", f"${stock_data_raw['Low'].iloc[-1]:.2f}")
+            else:
+                st.info("Intraday high/low data not available.")
+
+        with st.expander("📉 Drawdown Analysis"):
+            if 'Close' in data_with_indicators.columns:
+                max_close = data_with_indicators['Close'].cummax()
+                drawdown = (data_with_indicators['Close'] - max_close) / max_close * 100
+                st.line_chart(drawdown, height=150)
+                st.caption("Shows the percentage drop from the highest close (drawdown). Useful for risk assessment.")
+            else:
+                st.info("Drawdown data not available.")
+
+        with st.expander("🔄 Correlation with S&P 500"):
+            try:
+                sp500 = yf.download("^GSPC", period=period, interval=interval, progress=False)
+                if not sp500.empty and 'Close' in sp500.columns and 'Close' in stock_data_raw.columns:
+                    corr = stock_data_raw['Close'].corr(sp500['Close'])
+                    st.metric("Correlation with S&P 500", f"{corr:.2f}")
+                else:
+                    st.info("Could not compute correlation with S&P 500.")
+            except Exception:
+                st.info("Could not fetch S&P 500 data for correlation.")
+
+        with st.expander("📅 Price Seasonality (Monthly Returns)"):
+            if 'Close' in stock_data_raw.columns:
+                monthly = stock_data_raw['Close'].resample('M').last().pct_change()*100
+                st.bar_chart(monthly)
+                st.caption("Monthly price returns (%) for seasonality insight.")
+            else:
+                st.info("Monthly returns data not available.")
+
+        with st.expander("🧮 Simple Value Score"):
+            if stock_info:
+                pe = stock_info.get('trailingPE')
+                pb = stock_info.get('priceToBook')
+                if pe and pb:
+                    value_score = (1/pe + 1/pb) * 50
+                    st.metric("Simple Value Score", f"{value_score:.2f}")
+                    st.caption("Higher score may indicate better value (lower P/E and P/B).")
+                else:
+                    st.info("Not enough data for value score.")
+            else:
+                st.info("Value score data not available.")
+
+        with st.expander("🚀 Momentum Score"):
+            if 'Close' in data_with_indicators.columns:
+                returns = data_with_indicators['Close'].pct_change(periods=10).iloc[-1]
+                st.metric("10-Period Momentum (%)", f"{returns*100:.2f}%")
+            else:
+                st.info("Momentum data not available.")
+
+        with st.expander("📊 Price Volatility (Std Dev)":
+            if 'Close' in data_with_indicators.columns:
+                stddev = data_with_indicators['Close'].rolling(window=20).std().iloc[-1]
+                st.metric("20-Period Std Dev", f"{stddev:.2f}")
+            else:
+                st.info("Volatility data not available.")
+
+        with st.expander("💡 Insider Transactions"):
+            if stock_info and 'insiderTransactions' in stock_info:
+                st.write(stock_info['insiderTransactions'])
+            else:
+                st.info("Insider transactions data not available.")
+
+        with st.expander("🌐 ESG (Sustainability) Score"):
+            if stock_info and 'esgScores' in stock_info and stock_info['esgScores']:
+                esg = stock_info['esgScores']
+                st.metric("ESG Total Score", esg.get('totalEsg', 'N/A'))
+                st.metric("Environment Score", esg.get('environmentScore', 'N/A'))
+                st.metric("Social Score", esg.get('socialScore', 'N/A'))
+                st.metric("Governance Score", esg.get('governanceScore', 'N/A'))
+            else:
+                st.info("ESG score data not available.")
+
+        # --- END NEW FEATURES ---
+
         with st.expander("🏢 Company Profile"):
             if stock_info:
                 company_name = stock_info.get('longName', stock_info.get('shortName', ticker))
