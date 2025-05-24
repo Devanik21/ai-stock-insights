@@ -145,12 +145,21 @@ def get_ticker_details(ticker_symbol: str) -> Dict[str, Any]:
     try:
         tick = yf.Ticker(ticker_symbol)
         info = tick.info
-        news = tick.news
-        return {"info": info, "news": news}
+        # news = tick.news # We removed the news section, so this can be commented out or removed
+        recommendations = tick.recommendations
+        major_holders = tick.major_holders
+        institutional_holders = tick.institutional_holders
+        calendar = tick.calendar
+        return {
+            "info": info,
+            "recommendations": recommendations,
+            "major_holders": major_holders,
+            "institutional_holders": institutional_holders,
+            "calendar": calendar
+        }
     except Exception as e:
-        # Use st.sidebar.warning for non-critical errors
         st.sidebar.warning(f"Could not fetch some details for {ticker_symbol}: {e}")
-        return {"info": {}, "news": []}
+        return {"info": {}, "recommendations": None, "major_holders": None, "institutional_holders": None, "calendar": None}
 
 def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """Calculates and adds technical indicators to the DataFrame."""
@@ -211,7 +220,7 @@ def generate_gemini_summary(ai_model: genai.GenerativeModel, stock_ticker: str, 
 
 if ticker:
     stock_data_raw = load_data(ticker, period, interval)
-    ticker_details: Dict[str, Any] = {"info": {}, "news": []} # Initialize
+    ticker_details: Dict[str, Any] = {} # Initialize
 
     if not stock_data_raw.empty: # Only fetch details if primary data is good
         # Fetch additional details only once
@@ -247,7 +256,11 @@ if ticker:
         st.subheader("🛠️ Additional Analysis Tools")
 
         stock_info = ticker_details.get("info", {})
-        stock_news = ticker_details.get("news", [])
+        # stock_news = ticker_details.get("news", []) # Not used anymore
+        recommendations_data = ticker_details.get("recommendations")
+        major_holders_data = ticker_details.get("major_holders")
+        institutional_holders_data = ticker_details.get("institutional_holders")
+        calendar_data = ticker_details.get("calendar")
 
         with st.expander("📊 Volume Analysis"):
             if 'Volume' in data_with_indicators.columns:
@@ -322,6 +335,85 @@ if ticker:
                     st.info("Key financial ratios could not be fetched.")
             else:
                 st.info("Key financial ratios could not be fetched.")
+
+        with st.expander("🎯 Analyst Recommendations"):
+            if recommendations_data is not None and not recommendations_data.empty:
+                st.write(f"**Analyst Recommendations for {stock_info.get('shortName', ticker)} (Recent)**")
+                # Display the most recent few recommendations
+                recent_recs = recommendations_data.tail(5).sort_index(ascending=False)
+                # st.dataframe(recent_recs[['Firm', 'To Grade', 'Action']]) # Show more details
+                
+                # Count recommendations for a summary
+                if 'To Grade' in recent_recs.columns:
+                    recommendation_counts = recent_recs['To Grade'].value_counts()
+                    st.write("Recent Recommendation Summary:")
+                    for grade, count in recommendation_counts.items():
+                        st.markdown(f"- **{grade}**: {count}")
+                else:
+                    st.info("Detailed 'To Grade' column not available in recent recommendations.")
+                
+                if 'recommendationKey' in stock_info:
+                     st.metric("Overall Recommendation", stock_info['recommendationKey'].replace('_', ' ').title() if stock_info['recommendationKey'] else "N/A")
+
+            elif 'recommendationKey' in stock_info: # Fallback to info if recommendations DataFrame is empty
+                st.metric("Overall Recommendation", stock_info['recommendationKey'].replace('_', ' ').title() if stock_info['recommendationKey'] else "N/A")
+                st.info("Summary based on overall recommendation key. Detailed recent recommendations table not available.")
+            else:
+                st.info("Analyst recommendation data could not be fetched or is not available.")
+
+        with st.expander("🏦 Major Holders"):
+            if major_holders_data is not None and not major_holders_data.empty:
+                st.write(f"**Major Holders for {stock_info.get('shortName', ticker)}**")
+                st.dataframe(major_holders_data)
+            elif institutional_holders_data is not None and not institutional_holders_data.empty:
+                st.write(f"**Top Institutional Holders for {stock_info.get('shortName', ticker)}**")
+                st.dataframe(institutional_holders_data.head(10)) # Show top 10
+            else:
+                st.info("Major institutional holder data could not be fetched or is not available.")
+
+        with st.expander("📅 Earnings Calendar"):
+            if calendar_data is not None and not calendar_data.empty:
+                st.write(f"**Earnings Calendar for {stock_info.get('shortName', ticker)}**")
+                # yfinance calendar often returns a DataFrame with 'Earnings Date' and 'EPS Estimate' etc.
+                # The structure can vary, so let's be a bit flexible
+                if isinstance(calendar_data, pd.DataFrame):
+                    st.dataframe(calendar_data)
+                elif isinstance(calendar_data, dict) and 'Earnings Date' in calendar_data: # Sometimes it's a dict
+                     earnings_df = pd.DataFrame(calendar_data['Earnings Date'], columns=['Start Date', 'End Date'])
+                     if 'EPS Estimate' in calendar_data: earnings_df['EPS Estimate'] = calendar_data['EPS Estimate']
+                     if 'Revenue Estimate' in calendar_data: earnings_df['Revenue Estimate'] = calendar_data['Revenue Estimate']
+                     st.dataframe(earnings_df)
+                else:
+                     st.info("Earnings calendar data format is unexpected or limited.")
+            elif 'earningsTimestamp' in stock_info: # Fallback from .info
+                earnings_date = datetime.fromtimestamp(stock_info['earningsTimestamp']).strftime('%Y-%m-%d') if stock_info.get('earningsTimestamp') else "N/A"
+                st.metric("Next Earnings Date (approx.)", earnings_date)
+            else:
+                st.info("Earnings calendar data could not be fetched or is not available.")
+
+        with st.expander("📊 Interest & Ownership"):
+            if stock_info:
+                st.write(f"**Interest & Ownership Data for {stock_info.get('shortName', ticker)}**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Shares Outstanding", f"{stock_info.get('sharesOutstanding', 0)/1e6:.2f}M" if stock_info.get('sharesOutstanding') else "N/A")
+                    st.metric("Float", f"{stock_info.get('floatShares', 0)/1e6:.2f}M" if stock_info.get('floatShares') else "N/A")
+                    st.metric("% Held by Insiders", f"{stock_info.get('heldPercentInsiders', 0)*100:.2f}%" if stock_info.get('heldPercentInsiders') is not None else "N/A")
+                with col2:
+                    st.metric("% Held by Institutions", f"{stock_info.get('heldPercentInstitutions', 0)*100:.2f}%" if stock_info.get('heldPercentInstitutions') is not None else "N/A")
+                    st.metric("Short Ratio (days to cover)", f"{stock_info.get('shortRatio'):.2f}" if stock_info.get('shortRatio') else "N/A")
+                    st.metric("Short % of Float", f"{stock_info.get('shortPercentOfFloat')*100:.2f}%" if stock_info.get('shortPercentOfFloat') is not None else "N/A")
+            else:
+                st.info("Interest and ownership data could not be fetched.")
+
+        with st.expander("📈 Historical Performance Summary"):
+            if stock_info:
+                st.write(f"**Performance Summary for {stock_info.get('shortName', ticker)}**")
+                st.metric("52 Week Change", f"{stock_info.get('52WeekChange', 0)*100:.2f}%" if stock_info.get('52WeekChange') is not None else "N/A")
+                st.metric("YTD Return", f"{stock_info.get('ytdReturn', 0)*100:.2f}%" if stock_info.get('ytdReturn') is not None else "N/A")
+                st.metric("Previous Close", f"${stock_info.get('previousClose'):.2f}" if stock_info.get('previousClose') else "N/A")
+            else:
+                st.info("Historical performance summary data could not be fetched.")
 
         with st.expander("🏢 Company Profile"):
             if stock_info:
