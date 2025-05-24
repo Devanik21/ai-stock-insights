@@ -4,10 +4,11 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import google.generativeai as genai
+from datetime import datetime # Added for formatting news timestamps
 from typing import Optional, Dict, Any
 
 # Page config
-st.set_page_config(page_title="Stock Market Storyteller", page_icon="📈",layout="wide")
+st.set_page_config(page_title="📈 Stock Market Storyteller",  page_icon="📈",layout="wide")
 st.title("📈 Stock Market Storyteller")
 st.write("Narrate your favorite stocks with technical indicators & Gemini-powered summaries!")
 
@@ -138,6 +139,19 @@ def load_data(ticker_symbol: str, data_period: str, data_interval: str) -> pd.Da
         st.error(f"Error loading data for {ticker_symbol}: {e}")
         return pd.DataFrame()
 
+@st.cache_data
+def get_ticker_details(ticker_symbol: str) -> Dict[str, Any]:
+    """Fetches detailed information (like fundamentals, dividends) and news for a stock ticker."""
+    try:
+        tick = yf.Ticker(ticker_symbol)
+        info = tick.info
+        news = tick.news
+        return {"info": info, "news": news}
+    except Exception as e:
+        # Use st.warning for non-critical errors, or st.error if this data is essential
+        st.sidebar.warning(f"Could not fetch some details for {ticker_symbol}: {e}")
+        return {"info": {}, "news": []}
+
 def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """Calculates and adds technical indicators to the DataFrame."""
     data_ti = df.copy()
@@ -191,9 +205,14 @@ def generate_gemini_summary(ai_model: genai.GenerativeModel, stock_ticker: str, 
 
 if ticker:
     stock_data_raw = load_data(ticker, period, interval)
+    ticker_details: Dict[str, Any] = {"info": {}, "news": []} # Initialize
+
+    if not stock_data_raw.empty: # Only fetch details if primary data is good
+        # Fetch additional details only once
+        ticker_details = get_ticker_details(ticker)
 
     if not stock_data_raw.empty and 'Close' in stock_data_raw.columns:
-        st.subheader(f"📊 Price Chart for {ticker}")
+        st.subheader(f"📊 Price & Volume Chart for {ticker}")
         st.line_chart(stock_data_raw['Close'])
 
         data_with_indicators = calculate_technical_indicators(stock_data_raw)
@@ -221,31 +240,102 @@ if ticker:
         # --- Placeholder for New Tools ---
         st.subheader("🛠️ Additional Analysis Tools")
 
+        stock_info = ticker_details.get("info", {})
+        stock_news = ticker_details.get("news", [])
+
         with st.expander("📊 Volume Analysis"):
-            st.write("Detailed volume chart and analysis will be shown here.")
-            # Placeholder: You could add a volume bar chart using data_with_indicators['Volume']
             if 'Volume' in data_with_indicators.columns:
+                st.write("Recent Trading Volume:")
                 st.bar_chart(data_with_indicators['Volume'])
             else:
                 st.info("Volume data not available for this selection.")
 
         with st.expander("📈 Volatility Insights (e.g., Bollinger Bands)"):
             st.write("Bollinger Bands and other volatility metrics will be displayed here.")
+            # Placeholder for Bollinger Bands calculation and plotting
+            # Example:
+            # data_with_indicators['BB_Middle'] = data_with_indicators['Close'].rolling(window=SMA_SHORT_WINDOW).mean()
+            # data_with_indicators['BB_StdDev'] = data_with_indicators['Close'].rolling(window=SMA_SHORT_WINDOW).std()
+            # data_with_indicators['BB_Upper'] = data_with_indicators['BB_Middle'] + (data_with_indicators['BB_StdDev'] * 2)
+            # data_with_indicators['BB_Lower'] = data_with_indicators['BB_Middle'] - (data_with_indicators['BB_StdDev'] * 2)
+            # st.line_chart(data_with_indicators[['Close', 'BB_Upper', 'BB_Lower', 'BB_Middle']])
             st.info("Feature coming soon!")
 
         with st.expander("💰 Dividend Information"):
-            st.write("Dividend history and yield will be shown here.")
-            # Placeholder: stock_info = yf.Ticker(ticker).info; st.write(stock_info.get('dividendYield'))
-            st.info("Feature coming soon! (May require additional data fetching)")
+            if stock_info:
+                st.write(f"**{stock_info.get('shortName', ticker)} Dividend Details**")
+                div_yield = stock_info.get('dividendYield')
+                div_rate = stock_info.get('dividendRate')
+                ex_div_date_ts = stock_info.get('exDividendDate')
+                payout_ratio = stock_info.get('payoutRatio')
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Dividend Yield", f"{div_yield*100:.2f}%" if div_yield else "N/A")
+                    if ex_div_date_ts:
+                        st.metric("Ex-Dividend Date", datetime.fromtimestamp(ex_div_date_ts).strftime('%Y-%m-%d'))
+                    else:
+                        st.metric("Ex-Dividend Date", "N/A")
+                with col2:
+                    st.metric("Annual Dividend Rate", f"${div_rate:.2f}" if div_rate else "N/A")
+                    st.metric("Payout Ratio", f"{payout_ratio*100:.2f}%" if payout_ratio else "N/A")
+
+                if not any([div_yield, div_rate, ex_div_date_ts, payout_ratio]):
+                    st.info(f"{stock_info.get('shortName', ticker)} may not pay dividends or data is unavailable.")
+            else:
+                st.info("Dividend information could not be fetched.")
 
         with st.expander("🧾 Key Financial Ratios"):
-            st.write("P/E Ratio, EPS, and other fundamental ratios will be displayed here.")
-            # Placeholder: stock_info = yf.Ticker(ticker).info; st.write(stock_info.get('trailingPE'))
-            st.info("Feature coming soon! (May require additional data fetching)")
+            if stock_info:
+                st.write(f"**{stock_info.get('shortName', ticker)} Financial Ratios**")
+                
+                # Helper to format market cap
+                def format_market_cap(cap):
+                    if cap is None: return "N/A"
+                    if cap >= 1e12: return f"${cap/1e12:.2f} T"
+                    if cap >= 1e9: return f"${cap/1e9:.2f} B"
+                    if cap >= 1e6: return f"${cap/1e6:.2f} M"
+                    return f"${cap}"
+
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Market Cap", format_market_cap(stock_info.get('marketCap')))
+                    st.metric("Trailing P/E", f"{stock_info.get('trailingPE'):.2f}" if stock_info.get('trailingPE') else "N/A")
+                    st.metric("Forward P/E", f"{stock_info.get('forwardPE'):.2f}" if stock_info.get('forwardPE') else "N/A")
+                with col2:
+                    st.metric("Price to Sales (TTM)", f"{stock_info.get('priceToSalesTrailing12Months'):.2f}" if stock_info.get('priceToSalesTrailing12Months') else "N/A")
+                    st.metric("Price to Book", f"{stock_info.get('priceToBook'):.2f}" if stock_info.get('priceToBook') else "N/A")
+                    st.metric("Beta", f"{stock_info.get('beta'):.2f}" if stock_info.get('beta') else "N/A")
+                with col3:
+                    st.metric("Enterprise Value/Revenue", f"{stock_info.get('enterpriseToRevenue'):.2f}" if stock_info.get('enterpriseToRevenue') else "N/A")
+                    st.metric("Enterprise Value/EBITDA", f"{stock_info.get('enterpriseToEbitda'):.2f}" if stock_info.get('enterpriseToEbitda') else "N/A")
+                    st.metric("52 Week High", f"${stock_info.get('fiftyTwoWeekHigh'):.2f}" if stock_info.get('fiftyTwoWeekHigh') else "N/A")
+                
+                if not stock_info: # Fallback if stock_info was empty from the start
+                    st.info("Key financial ratios could not be fetched.")
+            else:
+                st.info("Key financial ratios could not be fetched.")
 
         with st.expander("📰 Recent News Headlines"):
-            st.write("Latest news articles related to the stock will be summarized or linked here.")
-            st.info("Feature coming soon! (May require news API integration)")
+            if stock_news:
+                st.write(f"**Recent News for {stock_info.get('shortName', ticker)}**")
+                for item in stock_news[:5]: # Display top 5 news items
+                    title = item.get('title', 'No Title')
+                    link = item.get('link', '#')
+                    publisher = item.get('publisher', 'N/A')
+                    publish_time_ts = item.get('providerPublishTime')
+                    
+                    publish_date_str = "N/A"
+                    if publish_time_ts:
+                        publish_date_str = datetime.fromtimestamp(publish_time_ts).strftime('%Y-%m-%d %H:%M')
+                    
+                    st.markdown(f"**[{title}]({link})**")
+                    st.caption(f"Source: {publisher} | Published: {publish_date_str}")
+                    st.markdown("---") # Separator
+            elif stock_info and not stock_news: # Info fetched but no news
+                 st.info(f"No recent news found for {stock_info.get('shortName', ticker)} via Yahoo Finance.")
+            else: # Neither info nor news could be fetched
+                st.info("News headlines could not be fetched.")
 
         st.subheader("📥 Download Processed Data")
         csv_data = data_with_indicators.to_csv().encode('utf-8')
