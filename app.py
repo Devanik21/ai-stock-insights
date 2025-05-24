@@ -28,6 +28,9 @@ interval = st.sidebar.selectbox("Select Interval", ["1d", "1h", "15m"])
 @st.cache_data
 def load_data(ticker, period, interval):
     data = yf.download(ticker, period=period, interval=interval)
+    # Flatten MultiIndex columns if present (yfinance can return multi-level for Single Ticker)
+    if isinstance(data.columns, pd.MultiIndex):
+        data.columns = data.columns.get_level_values(1)
     data.dropna(inplace=True)
     return data
 
@@ -38,9 +41,10 @@ if ticker:
     st.line_chart(data['Close'])
 
     st.subheader("📉 Technical Indicators")
+    # Moving Averages
     data['SMA_20'] = data['Close'].rolling(window=20).mean()
     data['SMA_50'] = data['Close'].rolling(window=50).mean()
-
+    # RSI calculation
     delta = data['Close'].diff()
     gain = delta.where(delta > 0, 0)
     loss = -delta.where(delta < 0, 0)
@@ -48,12 +52,13 @@ if ticker:
     avg_loss = loss.rolling(window=14).mean()
     rs = avg_gain / avg_loss
     data['RSI'] = 100 - (100 / (1 + rs))
-
+    # MACD calculation
     exp1 = data['Close'].ewm(span=12, adjust=False).mean()
     exp2 = data['Close'].ewm(span=26, adjust=False).mean()
     data['MACD'] = exp1 - exp2
     data['MACD_signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
 
+    # Plot indicators
     st.line_chart(data[['Close', 'SMA_20', 'SMA_50']])
     st.line_chart(data[['RSI']])
     st.line_chart(data[['MACD', 'MACD_signal']])
