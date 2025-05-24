@@ -6,7 +6,9 @@ import pandas as pd
 import google.generativeai as genai
 from datetime import datetime # Added for formatting news timestamps
 from typing import Optional, Dict, Any
-from sklearn.linear_model import LinearRegression # For price prediction
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures # For Polynomial Regression
+from sklearn.pipeline import make_pipeline # For Polynomial Regression
 import numpy as np # For numerical operations
  
 # Page config
@@ -946,6 +948,13 @@ if ticker:
         with st.expander("🔮 Future Price Prediction (Simple)"):
             if 'Close' in stock_data_raw.columns and len(stock_data_raw) >= 5: # Require at least 5 data points for a somewhat meaningful trend
                 try:
+                    model_type = st.radio(
+                        "Select Prediction Model:",
+                        ("Linear Regression", "Polynomial Regression"),
+                        key="prediction_model_type",
+                        horizontal=True
+                    )
+
                     # 1. Prepare data for Linear Regression
                     df_regr = stock_data_raw[['Close']].copy()
                     # Create a numerical time index as the feature
@@ -954,19 +963,27 @@ if ticker:
                     X_regr = df_regr[['time_idx']] # Feature (must be 2D for sklearn)
                     y_regr = df_regr['Close']      # Target
 
-                    # 2. Train Linear Regression model
-                    model_lr = LinearRegression()
-                    model_lr.fit(X_regr, y_regr)
+                    # 2. Train selected model
+                    model_name_display = ""
+                    if model_type == "Linear Regression":
+                        model_to_use = LinearRegression()
+                        model_to_use.fit(X_regr, y_regr)
+                        model_name_display = "Linear Regression"
+                    elif model_type == "Polynomial Regression":
+                        poly_degree = st.slider("Polynomial Degree:", min_value=2, max_value=5, value=3, key="poly_degree_slider")
+                        model_to_use = make_pipeline(PolynomialFeatures(degree=poly_degree, include_bias=False), LinearRegression())
+                        model_to_use.fit(X_regr, y_regr)
+                        model_name_display = f"Polynomial Regression (Degree {poly_degree})"
 
-                    # 3. Predict on historical data (to plot the regression line)
-                    historical_predictions = model_lr.predict(X_regr)
+                    # 3. Predict on historical data
+                    historical_predictions = model_to_use.predict(X_regr)
 
                     # 4. Predict future prices
                     future_periods = 10 # Predict for the next 10 periods
                     last_time_idx = df_regr['time_idx'].iloc[-1]
                     # Create future time indices
                     future_time_idx_array = np.arange(last_time_idx + 1, last_time_idx + 1 + future_periods).reshape(-1, 1)
-                    future_price_predictions = model_lr.predict(future_time_idx_array)
+                    future_price_predictions = model_to_use.predict(future_time_idx_array)
 
                     # 5. Prepare data for plotting
                     # Determine future dates for the x-axis
@@ -990,22 +1007,22 @@ if ticker:
                     # Create a continuous series for the regression line (historical fit + future forecast)
                     historical_trend_series = pd.Series(historical_predictions, index=stock_data_raw.index)
                     future_trend_series = pd.Series(future_price_predictions, index=future_idx_dates)
-                    chart_df['Linear Regression Trend'] = pd.concat([historical_trend_series, future_trend_series])
+                    chart_df[f'{model_name_display} Trend'] = pd.concat([historical_trend_series, future_trend_series])
 
-                    st.write(f"Predicting trend for the next {future_periods} periods using Linear Regression.")
-                    st.line_chart(chart_df)
+                    st.write(f"Predicting trend for the next {future_periods} periods using {model_name_display}.")
+                    st.line_chart(chart_df[['Actual Price', f'{model_name_display} Trend']])
                     
                     st.markdown(f"""
-                    **Disclaimer:** This is a very basic linear trend extrapolation and **not financial advice**. 
+                    **Disclaimer:** This is a basic trend extrapolation using **{model_name_display}** and is **not financial advice**. 
                     Actual prices are influenced by many complex factors not captured by this simple model. 
-                    The 'Linear Regression Trend' line shows the historical fit and its extension into the future.
+                    The '{model_name_display} Trend' line shows the historical fit and its extension into the future.
                     """)
                     st.markdown("""
                     **Note on Model Simplicity:**
-                    Linear regression provides a very basic trendline. For more nuanced predictions, consider:
-                    *   **Polynomial Regression:** To capture non-linear trends.
+                    The models used here (Linear and Polynomial Regression) provide basic trendlines. For more nuanced predictions, consider:
                     *   **Time Series Models (ARIMA, SARIMA):** For data with seasonality and autocorrelation.
                     *   **Machine Learning Models (e.g., Prophet, LSTMs):** For more complex patterns.
+                    *   **Fundamental Analysis:** Which considers company performance, industry trends, and economic factors.
                     These models require more data, careful tuning, and a deeper understanding of time series analysis.
                     """)
 
