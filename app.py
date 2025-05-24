@@ -1,9 +1,8 @@
-# 📈 Stock Market Storyteller with Gemini AI
+# 📈 Stock Market Storyteller with Gemini AI (Streamlit + TA-Lib-Free Version)
 
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import talib
 import datetime
 import numpy as np
 import google.generativeai as genai
@@ -39,10 +38,19 @@ if ticker:
     st.line_chart(data['Close'])
 
     st.subheader("📉 Technical Indicators")
-    data['SMA_20'] = talib.SMA(data['Close'], timeperiod=20)
-    data['SMA_50'] = talib.SMA(data['Close'], timeperiod=50)
-    data['RSI'] = talib.RSI(data['Close'], timeperiod=14)
-    data['MACD'], data['MACD_signal'], _ = talib.MACD(data['Close'])
+    data['SMA_20'] = data['Close'].rolling(window=20).mean()
+    data['SMA_50'] = data['Close'].rolling(window=50).mean()
+    delta = data['Close'].diff()
+    gain = np.where(delta > 0, delta, 0)
+    loss = np.where(delta < 0, -delta, 0)
+    avg_gain = pd.Series(gain).rolling(window=14).mean()
+    avg_loss = pd.Series(loss).rolling(window=14).mean()
+    rs = avg_gain / avg_loss
+    data['RSI'] = 100 - (100 / (1 + rs))
+    exp1 = data['Close'].ewm(span=12, adjust=False).mean()
+    exp2 = data['Close'].ewm(span=26, adjust=False).mean()
+    data['MACD'] = exp1 - exp2
+    data['MACD_signal'] = data['MACD'].ewm(span=9, adjust=False).mean()
 
     st.line_chart(data[['Close', 'SMA_20', 'SMA_50']])
     st.line_chart(data[['RSI']])
