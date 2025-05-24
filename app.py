@@ -1135,6 +1135,214 @@ if ticker:
                 else: st.info("Not enough data for Price Gap analysis. ⚠️")
             else: st.info("Price gap data not available (Open or Close prices missing). ⚠️")
 
+        # --- NEW Consolidated Expander 8: Financial Health & Valuation Deep Dive ---
+        with st.expander("📊 Financial Health & Valuation Deep Dive"):
+            if stock_info: # Primary check that basic info is available
+                st.write(f"Fetching detailed financial statements for {stock_info.get('shortName', ticker)}...")
+                try:
+                    tick = yf.Ticker(ticker)
+                    financials = tick.financials
+                    balance_sheet = tick.balance_sheet
+                    cashflow = tick.cashflow
+                    
+                    # Helper to safely get values from statements (latest period)
+                    def get_statement_value(statement_df, item_name, period_index=0):
+                        if statement_df is not None and not statement_df.empty and item_name in statement_df.index:
+                            if period_index < len(statement_df.columns):
+                                val = statement_df.loc[item_name, statement_df.columns[period_index]]
+                                return val if pd.notna(val) else None
+                        return None
+
+                    # --- Liquidity Ratios ---
+                    st.subheader("💧 Liquidity Ratios")
+                    st.caption("Measure a company's ability to meet its short-term obligations.")
+                    
+                    current_assets = get_statement_value(balance_sheet, 'Total Current Assets')
+                    current_liabilities = get_statement_value(balance_sheet, 'Total Current Liabilities')
+                    inventory = get_statement_value(balance_sheet, 'Inventory')
+                    
+                    col_l1, col_l2 = st.columns(2)
+                    with col_l1:
+                        if current_assets is not None and current_liabilities is not None and current_liabilities != 0:
+                            current_ratio = current_assets / current_liabilities
+                            st.metric("Current Ratio", f"{current_ratio:.2f}")
+                            st.caption("Ideal: >1, often 1.5-2. Varies by industry.")
+                        else:
+                            st.metric("Current Ratio", "N/A")
+                            st.caption("Missing Current Assets or Liabilities data.")
+                    
+                    with col_l2:
+                        if current_assets is not None and inventory is not None and current_liabilities is not None and current_liabilities != 0:
+                            quick_ratio = (current_assets - inventory) / current_liabilities
+                            st.metric("Quick Ratio (Acid-Test)", f"{quick_ratio:.2f}")
+                            st.caption("Ideal: >1. Excludes less liquid inventory.")
+                        elif current_assets is not None and current_liabilities is not None and current_liabilities != 0: # If inventory is missing but others present
+                            st.metric("Quick Ratio (Acid-Test)", "N/A")
+                            st.caption("Inventory data missing for Quick Ratio.")
+                        else:
+                            st.metric("Quick Ratio (Acid-Test)", "N/A")
+                            st.caption("Missing data for Quick Ratio.")
+                    st.markdown("---")
+
+                    # --- Profitability Ratios ---
+                    st.subheader("💰 Profitability Ratios")
+                    st.caption("Measure a company's ability to generate earnings relative to its revenue, assets, equity, etc.")
+                    
+                    gross_profit = get_statement_value(financials, 'Gross Profit')
+                    total_revenue = get_statement_value(financials, 'Total Revenue') # Or 'Reconciled Revenue'
+                    if total_revenue is None: total_revenue = get_statement_value(financials, 'Reconciled Revenue')
+
+                    net_income = get_statement_value(financials, 'Net Income') # Or 'Net Income From Continuing Operations'
+                    if net_income is None: net_income = get_statement_value(financials, 'Net Income From Continuing Operations')
+                    
+                    total_assets = get_statement_value(balance_sheet, 'Total Assets')
+                    total_stockholder_equity = get_statement_value(balance_sheet, 'Total Stockholder Equity')
+
+                    col_p1, col_p2, col_p3 = st.columns(3)
+                    with col_p1:
+                        if gross_profit is not None and total_revenue is not None and total_revenue != 0:
+                            gross_profit_margin = (gross_profit / total_revenue) * 100
+                            st.metric("Gross Profit Margin", f"{gross_profit_margin:.2f}%")
+                        else:
+                            st.metric("Gross Profit Margin", "N/A")
+                        
+                        # ROE from stock_info if available (often pre-calculated)
+                        roe_info = stock_info.get('returnOnEquity')
+                        if roe_info is not None:
+                            st.metric("Return on Equity (ROE) - Info", f"{roe_info*100:.2f}%")
+                        elif net_income is not None and total_stockholder_equity is not None and total_stockholder_equity != 0:
+                            roe_calc = (net_income / total_stockholder_equity) * 100
+                            st.metric("Return on Equity (ROE) - Calc", f"{roe_calc:.2f}%")
+                        else:
+                            st.metric("Return on Equity (ROE)", "N/A")
+
+                    with col_p2:
+                        if net_income is not None and total_revenue is not None and total_revenue != 0:
+                            net_profit_margin = (net_income / total_revenue) * 100
+                            st.metric("Net Profit Margin", f"{net_profit_margin:.2f}%")
+                        else:
+                            st.metric("Net Profit Margin", "N/A")
+
+                        # ROA from stock_info if available
+                        roa_info = stock_info.get('returnOnAssets')
+                        if roa_info is not None:
+                            st.metric("Return on Assets (ROA) - Info", f"{roa_info*100:.2f}%")
+                        elif net_income is not None and total_assets is not None and total_assets != 0:
+                            roa_calc = (net_income / total_assets) * 100
+                            st.metric("Return on Assets (ROA) - Calc", f"{roa_calc:.2f}%")
+                        else:
+                            st.metric("Return on Assets (ROA)", "N/A")
+                    
+                    with col_p3:
+                        # Operating Margin from stock_info
+                        op_margin_info = stock_info.get('operatingMargins')
+                        if op_margin_info is not None:
+                            st.metric("Operating Margin - Info", f"{op_margin_info*100:.2f}%")
+                        else:
+                            operating_income = get_statement_value(financials, 'Operating Income')
+                            if operating_income is not None and total_revenue is not None and total_revenue != 0:
+                                op_margin_calc = (operating_income / total_revenue) * 100
+                                st.metric("Operating Margin - Calc", f"{op_margin_calc:.2f}%")
+                            else:
+                                st.metric("Operating Margin", "N/A")
+                        
+                        # Earnings Per Share (EPS) from stock_info
+                        eps_trailing = stock_info.get('trailingEps')
+                        eps_forward = stock_info.get('forwardEps')
+                        if eps_trailing is not None:
+                            st.metric("EPS (Trailing)", f"${eps_trailing:.2f}")
+                        if eps_forward is not None:
+                            st.metric("EPS (Forward)", f"${eps_forward:.2f}")
+                        elif eps_trailing is None and eps_forward is None:
+                             st.metric("EPS", "N/A")
+
+                    st.markdown("---")
+
+                    # --- Debt & Solvency Ratios ---
+                    st.subheader("⚖️ Debt & Solvency Ratios")
+                    st.caption("Measure a company's ability to meet its long-term obligations and its overall financial leverage.")
+                    
+                    total_debt = get_statement_value(balance_sheet, 'Total Debt') # yfinance often has this
+                    if total_debt is None: # Try to calculate if not directly available
+                        short_long_term_debt = get_statement_value(balance_sheet, 'Short Long Term Debt')
+                        long_term_debt = get_statement_value(balance_sheet, 'Long Term Debt')
+                        if short_long_term_debt is not None and long_term_debt is not None:
+                            total_debt = short_long_term_debt + long_term_debt
+                        elif long_term_debt is not None: # If only long_term_debt is available
+                            total_debt = long_term_debt
+
+                    ebit = get_statement_value(financials, 'EBIT') # Earnings Before Interest and Taxes
+                    interest_expense = get_statement_value(financials, 'Interest Expense')
+                    
+                    col_d1, col_d2 = st.columns(2)
+                    with col_d1:
+                        # Debt-to-Equity from stock_info
+                        debt_to_equity_info = stock_info.get('debtToEquity')
+                        if debt_to_equity_info is not None:
+                            st.metric("Debt-to-Equity Ratio - Info", f"{debt_to_equity_info/100:.2f}") # yfinance D/E is often in %
+                        elif total_debt is not None and total_stockholder_equity is not None and total_stockholder_equity != 0:
+                            debt_to_equity_calc = total_debt / total_stockholder_equity
+                            st.metric("Debt-to-Equity Ratio - Calc", f"{debt_to_equity_calc:.2f}")
+                        else:
+                            st.metric("Debt-to-Equity Ratio", "N/A")
+
+                    with col_d2:
+                        if ebit is not None and interest_expense is not None and interest_expense != 0:
+                            interest_coverage_ratio = ebit / abs(interest_expense) # Interest expense can be negative
+                            st.metric("Interest Coverage Ratio", f"{interest_coverage_ratio:.2f}x")
+                            st.caption("Ideal: >1.5-2x. Higher is better.")
+                        else:
+                            st.metric("Interest Coverage Ratio", "N/A")
+                            st.caption("Missing EBIT or Interest Expense.")
+                    st.markdown("---")
+
+                    # --- Efficiency Ratios ---
+                    st.subheader("⚙️ Efficiency Ratios")
+                    st.caption("Measure how effectively a company utilizes its assets and manages its liabilities.")
+                    
+                    # Asset Turnover
+                    if total_revenue is not None and total_assets is not None and total_assets != 0:
+                        # Average total assets if previous period data is available
+                        total_assets_prev = get_statement_value(balance_sheet, 'Total Assets', period_index=1)
+                        avg_total_assets = (total_assets + total_assets_prev) / 2 if total_assets_prev is not None else total_assets
+                        
+                        asset_turnover_ratio = total_revenue / avg_total_assets
+                        st.metric("Asset Turnover Ratio", f"{asset_turnover_ratio:.2f}x")
+                        st.caption("Higher is generally better. Varies by industry.")
+                    else:
+                        st.metric("Asset Turnover Ratio", "N/A")
+                    # (Inventory Turnover, Receivables Turnover are harder without COGS/Credit Sales directly)
+                    st.markdown("---")
+
+                    # --- Market Value Ratios (Some are already in Company Overview) ---
+                    st.subheader("📈 Market Value Ratios")
+                    st.caption("Relate the company's stock price to its earnings, book value, sales, etc.")
+                    
+                    # Price/Sales (TTM) from stock_info
+                    price_to_sales_info = stock_info.get('priceToSalesTrailing12Months')
+                    if price_to_sales_info is not None:
+                        st.metric("Price/Sales (P/S) Ratio - Info", f"{price_to_sales_info:.2f}")
+                    
+                    # PEG Ratio from stock_info
+                    peg_ratio_info = stock_info.get('pegRatio')
+                    if peg_ratio_info is not None:
+                        st.metric("PEG Ratio - Info", f"{peg_ratio_info:.2f}")
+                        st.caption("P/E ratio divided by earnings growth rate. <1 may suggest undervaluation.")
+                    
+                    # Enterprise Value / EBITDA from stock_info
+                    ev_ebitda_info = stock_info.get('enterpriseToEbitda')
+                    if ev_ebitda_info is not None:
+                        st.metric("Enterprise Value/EBITDA - Info", f"{ev_ebitda_info:.2f}")
+
+                    if not any([price_to_sales_info, peg_ratio_info, ev_ebitda_info]):
+                        st.info("Some market value ratios (P/S, PEG, EV/EBITDA) are typically found in the 'Company Overview' section if available in `stock_info`.")
+
+                except Exception as e_fin_health:
+                    st.error(f"Error fetching or calculating detailed financial health data: {e_fin_health} ⚠️")
+                    st.info("Some financial statement data might be missing or in an unexpected format for this stock.")
+            else:
+                st.info("Detailed financial health and valuation analysis requires basic `stock_info` to be available. Please ensure a valid ticker is selected. ⚠️")
+
         st.subheader("📥 Download Processed Data")
         csv_data = data_with_indicators.to_csv().encode('utf-8')
         st.download_button(
@@ -1147,4 +1355,3 @@ if ticker:
         st.info(f"Could not retrieve or process data for {ticker}. Please check the ticker symbol and selected period/interval. ⚠️")
 else:
     st.info("Enter a stock ticker in the sidebar to get started. 🚀")
-
