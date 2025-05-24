@@ -1135,6 +1135,120 @@ if ticker:
                 else: st.info("Not enough data for Price Gap analysis. ⚠️")
             else: st.info("Price gap data not available (Open or Close prices missing). ⚠️")
 
+            st.markdown("---") # Separator for new features
+
+            st.subheader("📈 Return Distribution Histogram")
+            if 'Close' in stock_data_raw.columns and len(stock_data_raw['Close']) > 1:
+                returns_dist = stock_data_raw['Close'].pct_change().dropna()
+                if not returns_dist.empty:
+                    st.write(f"Distribution of {interval} returns:")
+                    # Using st.bar_chart for simplicity, for more control use matplotlib/plotly
+                    # To make it more like a histogram, we can count occurrences in bins
+                    # For now, a simple bar chart of returns themselves
+                    hist_fig, hist_ax = plt.subplots()
+                    returns_dist.hist(ax=hist_ax, bins=50, color='skyblue', edgecolor='black')
+                    hist_ax.set_title(f'Return Distribution for {ticker}')
+                    hist_ax.set_xlabel('Returns')
+                    hist_ax.set_ylabel('Frequency')
+                    st.pyplot(hist_fig)
+                    st.caption("Shows the frequency of different return values over the selected period.")
+                else:
+                    st.info("Not enough data to plot return distribution. ⚠️")
+            else:
+                st.info("Return distribution data not available (Close prices missing or insufficient). ⚠️")
+            st.markdown("---")
+
+            st.subheader("🔄 Autocorrelation of Returns (ACF)")
+            if 'Close' in stock_data_raw.columns and len(stock_data_raw['Close']) > 1:
+                returns_acf = stock_data_raw['Close'].pct_change().dropna()
+                if len(returns_acf) > 20: # Need sufficient lags
+                    from statsmodels.graphics.tsaplots import plot_acf
+                    acf_fig, acf_ax = plt.subplots()
+                    plot_acf(returns_acf, ax=acf_ax, lags=20, title=f'Autocorrelation of Returns for {ticker}')
+                    st.pyplot(acf_fig)
+                    st.caption("Shows the correlation of returns with their past values (lags). Significant spikes outside the blue area suggest predictability.")
+                else:
+                    st.info("Not enough data points for a meaningful ACF plot (need >20 returns). ⚠️")
+            else:
+                st.info("ACF data not available (Close prices missing or insufficient). ⚠️")
+            st.markdown("---")
+
+            st.subheader("📉 Volatility Clustering (ACF of Squared Returns)")
+            if 'Close' in stock_data_raw.columns and len(stock_data_raw['Close']) > 1:
+                returns_sq_acf = stock_data_raw['Close'].pct_change().dropna()
+                if len(returns_sq_acf) > 20:
+                    from statsmodels.graphics.tsaplots import plot_acf
+                    squared_returns = returns_sq_acf**2
+                    sq_acf_fig, sq_acf_ax = plt.subplots()
+                    plot_acf(squared_returns, ax=sq_acf_ax, lags=20, title=f'ACF of Squared Returns (Volatility Clustering) for {ticker}')
+                    st.pyplot(sq_acf_fig)
+                    st.caption("Significant spikes in the ACF of squared returns suggest volatility clustering (periods of high/low volatility tend to group together).")
+                else:
+                    st.info("Not enough data points for ACF of squared returns (need >20 returns). ⚠️")
+            else:
+                st.info("Volatility clustering data not available (Close prices missing or insufficient). ⚠️")
+            st.markdown("---")
+
+            st.subheader(f"📊 Price Distance from Key Moving Averages (%)")
+            if 'Close' in data_with_indicators.columns:
+                current_price = data_with_indicators['Close'].iloc[-1]
+                sma_short_val = data_with_indicators[f'SMA_{SMA_SHORT_WINDOW}'].iloc[-1]
+                sma_long_val = data_with_indicators[f'SMA_{SMA_LONG_WINDOW}'].iloc[-1]
+
+                if pd.notna(current_price) and pd.notna(sma_short_val) and sma_short_val != 0:
+                    dist_sma_short_pct = ((current_price - sma_short_val) / sma_short_val) * 100
+                    st.metric(f"Distance from {SMA_SHORT_WINDOW}-SMA", f"{dist_sma_short_pct:.2f}%")
+                else:
+                    st.metric(f"Distance from {SMA_SHORT_WINDOW}-SMA", "N/A")
+
+                if pd.notna(current_price) and pd.notna(sma_long_val) and sma_long_val != 0:
+                    dist_sma_long_pct = ((current_price - sma_long_val) / sma_long_val) * 100
+                    st.metric(f"Distance from {SMA_LONG_WINDOW}-SMA", f"{dist_sma_long_pct:.2f}%")
+                else:
+                    st.metric(f"Distance from {SMA_LONG_WINDOW}-SMA", "N/A")
+                st.caption("Shows how far the current price is from its key moving averages, in percentage terms.")
+            else:
+                st.info("Price distance from MAs data not available. ⚠️")
+            st.markdown("---")
+
+            st.subheader("🔗 Correlation of Technical Indicators")
+            if not data_with_indicators.empty:
+                indicators_to_correlate = ['Close', f'SMA_{SMA_SHORT_WINDOW}', f'SMA_{SMA_LONG_WINDOW}', 'RSI', 'MACD', 'Volume']
+                # Filter out columns that might not exist or are all NaN
+                valid_cols = [col for col in indicators_to_correlate if col in data_with_indicators.columns and not data_with_indicators[col].isnull().all()]
+                
+                if len(valid_cols) > 1:
+                    corr_matrix = data_with_indicators[valid_cols].corr()
+                    st.write("Correlation Matrix:")
+                    st.dataframe(corr_matrix.style.background_gradient(cmap='coolwarm', axis=None).format("{:.2f}"))
+                    st.caption("Shows the Pearson correlation coefficient between selected technical indicators and price/volume.")
+                else:
+                    st.info("Not enough valid indicators available to compute a correlation matrix. ⚠️")
+            else:
+                st.info("Indicator correlation data not available. ⚠️")
+            st.markdown("---")
+
+            st.subheader("📈 Consecutive Up/Down Days")
+            if 'Close' in stock_data_raw.columns and len(stock_data_raw['Close']) > 1:
+                price_diff = stock_data_raw['Close'].diff()
+                consecutive_days = 0
+                # Check last day's direction and count backwards
+                if price_diff.iloc[-1] > 0: # Last day was up
+                    for x in price_diff.iloc[::-1]: # Iterate backwards
+                        if x > 0: consecutive_days += 1
+                        else: break
+                    st.metric("Consecutive Up Days", f"{consecutive_days} ⬆️")
+                elif price_diff.iloc[-1] < 0: # Last day was down
+                    for x in price_diff.iloc[::-1]:
+                        if x < 0: consecutive_days += 1
+                        else: break
+                    st.metric("Consecutive Down Days", f"{consecutive_days} ⬇️")
+                else: # Last day was flat
+                    st.metric("Consecutive Up/Down Days", "0 (Flat) ➖")
+                st.caption("Counts the number of consecutive periods the price has closed higher or lower.")
+            else:
+                st.info("Consecutive up/down days data not available. ⚠️")
+
         # --- NEW Consolidated Expander 8: Financial Health & Valuation Deep Dive ---
         with st.expander("📊 Financial Health & Valuation Deep Dive"):
             if stock_info: # Primary check that basic info is available
