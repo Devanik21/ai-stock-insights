@@ -29,6 +29,38 @@ if gemini_api_key:
         genai.configure(api_key=gemini_api_key)
         model = genai.GenerativeModel(GEMINI_MODEL_NAME)
         st.sidebar.success("Gemini AI configured successfully!")
+        # --- AI Chat with Data Tool ---
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("🤖 AI Chat with Data")
+        if "chat_history" not in st.session_state:
+            st.session_state["chat_history"] = []
+        user_prompt = st.sidebar.text_area("Ask Gemini about your stock data:", key="ai_chat_input")
+        if st.sidebar.button("Send", key="ai_chat_send"):
+            if user_prompt and model:
+                # Prepare a summary of the latest data for context
+                if 'stock_data_raw' in locals() and not stock_data_raw.empty:
+                    context = stock_data_raw.tail(10).to_csv()
+                    chat_prompt = (
+                        f"You are a helpful stock market AI assistant. "
+                        f"Here is the latest data for the selected stock (last 10 rows, CSV):\n{context}\n\n"
+                        f"User question: {user_prompt}\n"
+                        "Answer in a concise, clear way. If relevant, use the data provided."
+                    )
+                else:
+                    chat_prompt = user_prompt
+                try:
+                    response = model.generate_content(chat_prompt)
+                    st.session_state["chat_history"].append(("user", user_prompt))
+                    st.session_state["chat_history"].append(("ai", response.text))
+                except Exception as e:
+                    st.session_state["chat_history"].append(("ai", f"Gemini error: {e}"))
+        # Display chat history
+        for role, msg in st.session_state["chat_history"]:
+            if role == "user":
+                st.sidebar.markdown(f"**You:** {msg}")
+            else:
+                st.sidebar.markdown(f"**Gemini:** {msg}")
+        st.sidebar.markdown("---")
     except Exception as e:
         st.sidebar.error(f"Failed to configure Gemini: {e}")
         model = None
@@ -479,7 +511,7 @@ if ticker:
             else:
                 st.info("Momentum data not available.")
 
-        with st.expander("📊 Price Volatility (Std Dev)"):
+        with st.expander("📊 Price Volatility (Std Dev)":
             if 'Close' in data_with_indicators.columns:
                 stddev = data_with_indicators['Close'].rolling(window=20).std().iloc[-1]
                 st.metric("20-Period Std Dev", f"{stddev:.2f}")
