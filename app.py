@@ -29,8 +29,9 @@ interval = st.sidebar.selectbox("Select Interval", ["1d", "1h", "15m"])
 def load_data(ticker, period, interval):
     data = yf.download(ticker, period=period, interval=interval)
     # Flatten MultiIndex columns if present (yfinance can return multi-level for Single Ticker)
-    if isinstance(data.columns, pd.MultiIndex):
-        data.columns = data.columns.get_level_values(1)
+        if isinstance(data.columns, pd.MultiIndex):
+        # If MultiIndex (e.g., first level is field, second is ticker), take the first level
+        data.columns = data.columns.get_level_values(0)
     data.dropna(inplace=True)
     return data
 
