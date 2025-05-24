@@ -379,7 +379,7 @@ if ticker:
                 if isinstance(calendar_data, pd.DataFrame):
                     st.dataframe(calendar_data)
                 elif isinstance(calendar_data, dict) and 'Earnings Date' in calendar_data: # Sometimes it's a dict
-                     earnings_df = pd.DataFrame(calendar_data['Earnings Date'], columns=['Start Date', 'End Date'])
+                     earnings_df = pd.DataFrame(calendar_data['Earnings Date'], columns=['Earnings Date'])
                      if 'EPS Estimate' in calendar_data: earnings_df['EPS Estimate'] = calendar_data['EPS Estimate']
                      if 'Revenue Estimate' in calendar_data: earnings_df['Revenue Estimate'] = calendar_data['Revenue Estimate']
                      st.dataframe(earnings_df)
