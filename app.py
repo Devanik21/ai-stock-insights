@@ -479,7 +479,7 @@ if ticker:
             else:
                 st.info("Momentum data not available.")
 
-        with st.expander("📊 Price Volatility (Std Dev)":
+        with st.expander("📊 Price Volatility (Std Dev)"):
             if 'Close' in data_with_indicators.columns:
                 stddev = data_with_indicators['Close'].rolling(window=20).std().iloc[-1]
                 st.metric("20-Period Std Dev", f"{stddev:.2f}")
