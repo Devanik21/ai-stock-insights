@@ -123,6 +123,30 @@ pre, code {
      color: #f0f0f0 !important; /* Ensure text in paragraph is light */
 }
 
+/* Flashcard specific styles */
+.flashcard-item {
+    background: linear-gradient(145deg, #2c3e50, #1e2b37); /* Dark blue/grey gradient */
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 10px; /* Add some space above the card within the expander */
+    margin-bottom: 10px; /* Add some space below the card */
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
+    color: #e0e0e0; /* Light text color for definition */
+}
+
+.flashcard-item h3 {
+    color: #66b2ff; /* A brighter, appealing blue for the term */
+    margin-top: 0;
+    margin-bottom: 12px;
+    font-size: 1.5em; /* Make term slightly larger */
+}
+
+.flashcard-item p {
+    color: #c5d5e5; /* Softer light color for definition text */
+    font-size: 1em;
+    line-height: 1.6;
+}
+
 
 /* Chart backgrounds - May need specific overrides depending on chart type */
 /* This is harder to control with simple CSS, Streamlit's defaults might show light areas */
@@ -271,14 +295,26 @@ with st.expander("📚 Stock Market Flashcards"):
         {"term": "MACD", "definition": "Moving Average Convergence Divergence, a trend-following momentum indicator."},
         {"term": "SMA", "definition": "Simple Moving Average, the unweighted mean of the previous data points."},
         {"term": "Bollinger Bands", "definition": "Volatility bands placed above and below a moving average."},
+        {"term": "Market Capitalization (Market Cap)", "definition": "The total market value of a company's outstanding shares. Calculated by multiplying the current stock price by the total number of outstanding shares."},
+        {"term": "Dividend Yield", "definition": "The annual dividend payment per share divided by the stock's current price, expressed as a percentage. It shows how much a company pays out in dividends relative to its stock price."},
+        {"term": "Beta", "definition": "A measure of a stock's volatility in relation to the overall market (e.g., S&P 500). A beta greater than 1 indicates higher volatility than the market; less than 1 means lower volatility."},
+        {"term": "Blue Chip Stocks", "definition": "Shares of large, well-established, and financially sound companies that have operated for many years and have dependable earnings, often paying dividends."},
+        {"term": "Exchange Traded Fund (ETF)", "definition": "A type of investment fund and exchange-traded product, i.e., they are traded on stock exchanges. ETFs hold assets such as stocks, commodities, or bonds and generally operate with an arbitrage mechanism designed to keep it trading close to its net asset value."},
+        {"term": "P/B Ratio (Price-to-Book Ratio)", "definition": "Compares a company's market capitalization to its book value. A lower P/B ratio could mean the stock is undervalued."},
+        {"term": "Volume", "definition": "The number of shares or contracts traded in a security or an entire market during a given period. High volume can indicate strong interest in a security at its current price."},
     ]
     card_index = st.session_state.get('card_index', 0)
     card = flashcards[card_index % len(flashcards)]
 
     # Display the current (first) flashcard
     # The navigation buttons have been removed.
-    st.subheader(card["term"])
-    st.write(card["definition"])
+    # Using markdown to apply custom CSS class
+    st.markdown(f"""
+    <div class="flashcard-item">
+        <h3>{card['term']}</h3>
+        <p>{card['definition']}</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 # Fetch stock data
 @st.cache_data
