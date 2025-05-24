@@ -36,6 +36,19 @@ else:
 
 # Sidebar stock selection
 st.sidebar.header("📦 Stock Settings")
+st.sidebar.markdown("""
+**Example Tickers:**
+- AAPL (Apple)
+- MSFT (Microsoft)
+- GOOGL (Alphabet/Google)
+- AMZN (Amazon)
+- TSLA (Tesla)
+- NVDA (NVIDIA)
+- META (Meta Platforms)
+- JPM (JPMorgan Chase)
+- V (Visa)
+- JNJ (Johnson & Johnson)
+""")
 ticker = st.sidebar.text_input("Enter Stock Ticker (e.g. AAPL)", value="AAPL")
 period = st.sidebar.selectbox("Select Data Period", ["1mo", "3mo", "6mo", "1y", "2y"], index=2)
 interval = st.sidebar.selectbox("Select Interval", ["1d", "1wk", "1mo", "1h", "15m"], index=0) # Added more intervals
