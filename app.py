@@ -36,19 +36,80 @@ else:
 
 # Sidebar stock selection
 st.sidebar.header("📦 Stock Settings")
-st.sidebar.markdown("""
-**Example Tickers:**
-- AAPL (Apple)
-- MSFT (Microsoft)
-- GOOGL (Alphabet/Google)
-- AMZN (Amazon)
-- TSLA (Tesla)
-- NVDA (NVIDIA)
-- META (Meta Platforms)
-- JPM (JPMorgan Chase)
-- V (Visa)
-- JNJ (Johnson & Johnson)
-""")
+
+with st.sidebar.expander("💡 Help me find codes (Examples)"):
+    st.markdown("""
+    Here are some popular stock ticker symbols to get you started:
+
+    **Tech & Software:**
+    - AAPL (Apple Inc.)
+    - MSFT (Microsoft Corp.)
+    - GOOGL (Alphabet Inc. - Google)
+    - AMZN (Amazon.com Inc.)
+    - TSLA (Tesla, Inc.)
+    - NVDA (NVIDIA Corp.)
+    - META (Meta Platforms, Inc.)
+    - CRM (Salesforce, Inc.)
+    - INTC (Intel Corp.)
+    - AMD (Advanced Micro Devices)
+    - ORCL (Oracle Corp.)
+    - ADBE (Adobe Inc.)
+    - QCOM (QUALCOMM Inc.)
+    - CSCO (Cisco Systems, Inc.)
+    - IBM (IBM Corp.)
+
+    **Finance & Payments:**
+    - JPM (JPMorgan Chase & Co.)
+    - V (Visa Inc.)
+    - MA (Mastercard Inc.)
+    - BAC (Bank of America Corp.)
+    - GS (Goldman Sachs Group)
+    - WFC (Wells Fargo & Co.)
+    - BRK-B (Berkshire Hathaway Inc. Class B)
+    - AXP (American Express Co.)
+    - PYPL (PayPal Holdings, Inc.)
+
+    **Consumer (Discretionary & Staples):**
+    - WMT (Walmart Inc.)
+    - COST (Costco Wholesale Corp.)
+    - MCD (McDonald's Corp.)
+    - SBUX (Starbucks Corp.)
+    - NKE (NIKE, Inc.)
+    - HD (The Home Depot, Inc.)
+    - PG (Procter & Gamble Co.)
+    - KO (The Coca-Cola Co.)
+    - PEP (PepsiCo, Inc.)
+    - TGT (Target Corp.)
+
+    **Healthcare:**
+    - JNJ (Johnson & Johnson)
+    - PFE (Pfizer Inc.)
+    - UNH (UnitedHealth Group Inc.)
+    - LLY (Eli Lilly and Co.)
+    - MRK (Merck & Co., Inc.)
+    - ABBV (AbbVie Inc.)
+    - MRNA (Moderna, Inc.)
+
+    **Industrials & Energy:**
+    - BA (The Boeing Company)
+    - CAT (Caterpillar Inc.)
+    - XOM (Exxon Mobil Corp.)
+    - CVX (Chevron Corp.)
+    - GE (General Electric Co.)
+    - HON (Honeywell International Inc.)
+
+    **Communication & Entertainment:**
+    - NFLX (Netflix, Inc.)
+    - DIS (The Walt Disney Co.)
+    - CMCSA (Comcast Corp.)
+    - T (AT&T Inc.)
+    - VZ (Verizon Communications Inc.)
+
+    **Logistics:**
+    - UPS (United Parcel Service, Inc.)
+    - FDX (FedEx Corp.)
+    """)
+
 ticker = st.sidebar.text_input("Enter Stock Ticker (e.g. AAPL)", value="AAPL")
 period = st.sidebar.selectbox("Select Data Period", ["1mo", "3mo", "6mo", "1y", "2y"], index=2)
 interval = st.sidebar.selectbox("Select Interval", ["1d", "1wk", "1mo", "1h", "15m"], index=0) # Added more intervals
