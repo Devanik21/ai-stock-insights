@@ -950,7 +950,7 @@ if ticker:
                 try:
                     model_type = st.radio(
                         "Select Prediction Model:",
-                        ("Linear Regression", "Polynomial Regression", "SMA Forecast"),
+                        ("Linear Regression", "Polynomial Regression"),
                         key="prediction_model_type",
                         horizontal=True
                     )
@@ -969,27 +969,21 @@ if ticker:
                         model_to_use = LinearRegression()
                         model_to_use.fit(X_regr, y_regr)
                         model_name_display = "Linear Regression"
-                        historical_predictions = model_to_use.predict(X_regr)
-                        future_price_predictions = model_to_use.predict(future_time_idx_array)
                     elif model_type == "Polynomial Regression":
                         poly_degree = st.slider("Polynomial Degree:", min_value=2, max_value=5, value=3, key="poly_degree_slider")
                         model_to_use = make_pipeline(PolynomialFeatures(degree=poly_degree, include_bias=False), LinearRegression())
                         model_to_use.fit(X_regr, y_regr)
                         model_name_display = f"Polynomial Regression (Degree {poly_degree})"
-                        historical_predictions = model_to_use.predict(X_regr)
-                        future_price_predictions = model_to_use.predict(future_time_idx_array)
-                    elif model_type == "SMA Forecast":
-                        sma_window = st.slider("SMA Window for Forecast:", min_value=5, max_value=50, value=20, key="sma_forecast_window")
-                        historical_predictions = df_regr['Close'].rolling(window=sma_window).mean()
-                        last_sma_value = historical_predictions.iloc[-1] if not historical_predictions.empty and not pd.isna(historical_predictions.iloc[-1]) else df_regr['Close'].iloc[-1] # Fallback if SMA is NaN
-                        future_price_predictions = np.full(future_periods, last_sma_value)
-                        model_name_display = f"SMA ({sma_window}-period) Forecast"
+
+                    # 3. Predict on historical data
+                    historical_predictions = model_to_use.predict(X_regr)
 
                     # 4. Predict future prices
                     future_periods = 10 # Predict for the next 10 periods
                     last_time_idx = df_regr['time_idx'].iloc[-1]
                     # Create future time indices
                     future_time_idx_array = np.arange(last_time_idx + 1, last_time_idx + 1 + future_periods).reshape(-1, 1)
+                    future_price_predictions = model_to_use.predict(future_time_idx_array)
 
                     # 5. Prepare data for plotting
                     # Determine future dates for the x-axis
@@ -1025,7 +1019,7 @@ if ticker:
                     """)
                     st.markdown("""
                     **Note on Model Simplicity:**
-                    The models used here (Linear Regression, Polynomial Regression, SMA Forecast) provide basic trendlines. For more nuanced predictions, consider:
+                    The models used here (Linear and Polynomial Regression) provide basic trendlines. For more nuanced predictions, consider:
                     *   **Time Series Models (ARIMA, SARIMA):** For data with seasonality and autocorrelation.
                     *   **Machine Learning Models (e.g., Prophet, LSTMs):** For more complex patterns.
                     *   **Fundamental Analysis:** Which considers company performance, industry trends, and economic factors.
