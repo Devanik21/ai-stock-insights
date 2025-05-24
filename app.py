@@ -372,7 +372,7 @@ if ticker:
                 st.info("Major institutional holder data could not be fetched or is not available.")
 
         with st.expander("📅 Earnings Calendar"):
-            if calendar_data is not None and not calendar_data.empty:
+            if calendar_data is not None and ((isinstance(calendar_data, pd.DataFrame) and not calendar_data.empty) or (isinstance(calendar_data, dict) and calendar_data)):
                 st.write(f"**Earnings Calendar for {stock_info.get('shortName', ticker)}**")
                 # yfinance calendar often returns a DataFrame with 'Earnings Date' and 'EPS Estimate' etc.
                 # The structure can vary, so let's be a bit flexible
