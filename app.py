@@ -279,14 +279,14 @@ with st.expander("📚 Stock Market Flashcards"):
     with col1:
         if st.button("Previous ◀️", key="prev_card"):
             st.session_state['card_index'] = (card_index - 1) % len(flashcards)
-            st.experimental_rerun()
+            st.rerun()
     with col2:
         st.subheader(card["term"])
         st.write(card["definition"])
     with col3:
         if st.button("Next ▶️", key="next_card"):
             st.session_state['card_index'] = (card_index + 1) % len(flashcards)
-            st.experimental_rerun()
+            st.rerun()
 
 # Fetch stock data
 @st.cache_data
