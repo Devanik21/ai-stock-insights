@@ -148,7 +148,7 @@ def get_ticker_details(ticker_symbol: str) -> Dict[str, Any]:
         news = tick.news
         return {"info": info, "news": news}
     except Exception as e:
-        # Use st.warning for non-critical errors, or st.error if this data is essential
+        # Use st.sidebar.warning for non-critical errors
         st.sidebar.warning(f"Could not fetch some details for {ticker_symbol}: {e}")
         return {"info": {}, "news": []}
 
@@ -323,26 +323,17 @@ if ticker:
             else:
                 st.info("Key financial ratios could not be fetched.")
 
-        with st.expander("📰 Recent News Headlines"):
-            if stock_news:
-                st.write(f"**Recent News for {stock_info.get('shortName', ticker)}**")
-                for item in stock_news[:5]: # Display top 5 news items
-                    title = item.get('title', 'No Title')
-                    link = item.get('link', '#')
-                    publisher = item.get('publisher', 'N/A')
-                    publish_time_ts = item.get('providerPublishTime')
-                    
-                    publish_date_str = "N/A"
-                    if publish_time_ts:
-                        publish_date_str = datetime.fromtimestamp(publish_time_ts).strftime('%Y-%m-%d %H:%M')
-                    
-                    st.markdown(f"**[{title}]({link})**")
-                    st.caption(f"Source: {publisher} | Published: {publish_date_str}")
-                    st.markdown("---") # Separator
-            elif stock_info and not stock_news: # Info fetched but no news
-                 st.info(f"No recent news found for {stock_info.get('shortName', ticker)} via Yahoo Finance.")
-            else: # Neither info nor news could be fetched
-                st.info("News headlines could not be fetched.")
+        with st.expander("🏢 Company Profile"):
+            if stock_info:
+                company_name = stock_info.get('longName', stock_info.get('shortName', ticker))
+                st.write(f"**About {company_name}**")
+                business_summary = stock_info.get('longBusinessSummary')
+                if business_summary:
+                    st.markdown(business_summary)
+                else:
+                    st.info(f"A detailed business summary for {company_name} is not available.")
+            else:
+                st.info("Company profile information could not be fetched.")
 
         st.subheader("📥 Download Processed Data")
         csv_data = data_with_indicators.to_csv().encode('utf-8')
