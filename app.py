@@ -6,7 +6,9 @@ import pandas as pd
 import google.generativeai as genai
 from datetime import datetime # Added for formatting news timestamps
 from typing import Optional, Dict, Any
-
+from sklearn.linear_model import LinearRegression # For price prediction
+import numpy as np # For numerical operations
+ 
 # Page config
 st.set_page_config(page_title="📈 Stock Market Storyteller",  page_icon="📈",layout="wide")
 st.title("📈 Stock Market Storyteller 🚀")
@@ -942,8 +944,76 @@ if ticker:
         st.subheader("✨ Advanced Features")
 
         with st.expander("🔮 Future Price Prediction (Simple)"):
-             st.info("Future price prediction is complex and requires advanced models. This is a placeholder. 🚧")
-             # Placeholder for future implementation (e.g., using Prophet, simple linear regression)
+            if 'Close' in stock_data_raw.columns and len(stock_data_raw) >= 5: # Require at least 5 data points for a somewhat meaningful trend
+                try:
+                    # 1. Prepare data for Linear Regression
+                    df_regr = stock_data_raw[['Close']].copy()
+                    # Create a numerical time index as the feature
+                    df_regr['time_idx'] = np.arange(len(df_regr)) 
+                    
+                    X_regr = df_regr[['time_idx']] # Feature (must be 2D for sklearn)
+                    y_regr = df_regr['Close']      # Target
+
+                    # 2. Train Linear Regression model
+                    model_lr = LinearRegression()
+                    model_lr.fit(X_regr, y_regr)
+
+                    # 3. Predict on historical data (to plot the regression line)
+                    historical_predictions = model_lr.predict(X_regr)
+
+                    # 4. Predict future prices
+                    future_periods = 10 # Predict for the next 10 periods
+                    last_time_idx = df_regr['time_idx'].iloc[-1]
+                    # Create future time indices
+                    future_time_idx_array = np.arange(last_time_idx + 1, last_time_idx + 1 + future_periods).reshape(-1, 1)
+                    future_price_predictions = model_lr.predict(future_time_idx_array)
+
+                    # 5. Prepare data for plotting
+                    # Determine future dates for the x-axis
+                    last_date = stock_data_raw.index[-1]
+                    # Try to infer frequency from the data's index
+                    freq = pd.infer_freq(stock_data_raw.index)
+                    if not freq: # Fallback if inference fails
+                        freq_map = {'15m': '15T', '1h': 'H', '1d': 'D', '1wk': 'W', '1mo': 'MS'}
+                        freq = freq_map.get(interval)
+                        if not freq: # Ultimate fallback if interval is unusual
+                            st.warning(f"Could not infer data frequency for interval '{interval}'. Using daily ('D') frequency for future dates. Predictions might be misaligned.")
+                            freq = 'D' 
+                    
+                    future_idx_dates = pd.date_range(start=last_date, periods=future_periods + 1, freq=freq)[1:]
+
+                    # Create a combined DataFrame for charting
+                    combined_index = stock_data_raw.index.union(future_idx_dates)
+                    chart_df = pd.DataFrame(index=combined_index)
+                    chart_df['Actual Price'] = stock_data_raw['Close'] # Historical actuals
+                    
+                    # Create a continuous series for the regression line (historical fit + future forecast)
+                    historical_trend_series = pd.Series(historical_predictions, index=stock_data_raw.index)
+                    future_trend_series = pd.Series(future_price_predictions, index=future_idx_dates)
+                    chart_df['Linear Regression Trend'] = pd.concat([historical_trend_series, future_trend_series])
+
+                    st.write(f"Predicting trend for the next {future_periods} periods using Linear Regression.")
+                    st.line_chart(chart_df)
+                    
+                    st.markdown(f"""
+                    **Disclaimer:** This is a very basic linear trend extrapolation and **not financial advice**. 
+                    Actual prices are influenced by many complex factors not captured by this simple model. 
+                    The 'Linear Regression Trend' line shows the historical fit and its extension into the future.
+                    """)
+                    st.markdown("""
+                    **Note on Model Simplicity:**
+                    Linear regression provides a very basic trendline. For more nuanced predictions, consider:
+                    *   **Polynomial Regression:** To capture non-linear trends.
+                    *   **Time Series Models (ARIMA, SARIMA):** For data with seasonality and autocorrelation.
+                    *   **Machine Learning Models (e.g., Prophet, LSTMs):** For more complex patterns.
+                    These models require more data, careful tuning, and a deeper understanding of time series analysis.
+                    """)
+
+                except Exception as e:
+                    st.error(f"Error generating price prediction: {e}")
+                    st.info("Could not generate prediction. Ensure sufficient data is available for the selected period and interval.")
+            else:
+                st.info("Not enough data to perform price prediction (requires at least 5 data points). Select a longer period or ensure data is available. ⚠️")
 
         with st.expander("📰 Latest News Headlines"):
             try:
