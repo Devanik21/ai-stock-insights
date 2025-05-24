@@ -180,6 +180,12 @@ def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     exp2 = data_ti['Close'].ewm(span=MACD_SLOW_PERIOD, adjust=False).mean()
     data_ti['MACD'] = exp1 - exp2
     data_ti['MACD_signal'] = data_ti['MACD'].ewm(span=MACD_SIGNAL_PERIOD, adjust=False).mean()
+
+    # Bollinger Bands
+    data_ti[f'BB_Middle_{SMA_SHORT_WINDOW}'] = data_ti['Close'].rolling(window=SMA_SHORT_WINDOW).mean()
+    data_ti[f'BB_StdDev_{SMA_SHORT_WINDOW}'] = data_ti['Close'].rolling(window=SMA_SHORT_WINDOW).std()
+    data_ti[f'BB_Upper_{SMA_SHORT_WINDOW}'] = data_ti[f'BB_Middle_{SMA_SHORT_WINDOW}'] + (data_ti[f'BB_StdDev_{SMA_SHORT_WINDOW}'] * 2)
+    data_ti[f'BB_Lower_{SMA_SHORT_WINDOW}'] = data_ti[f'BB_Middle_{SMA_SHORT_WINDOW}'] - (data_ti[f'BB_StdDev_{SMA_SHORT_WINDOW}'] * 2)
     return data_ti
 
 def generate_gemini_summary(ai_model: genai.GenerativeModel, stock_ticker: str, latest_data: pd.Series) -> str:
@@ -251,15 +257,16 @@ if ticker:
                 st.info("Volume data not available for this selection.")
 
         with st.expander("📈 Volatility Insights (e.g., Bollinger Bands)"):
-            st.write("Bollinger Bands and other volatility metrics will be displayed here.")
-            # Placeholder for Bollinger Bands calculation and plotting
-            # Example:
-            # data_with_indicators['BB_Middle'] = data_with_indicators['Close'].rolling(window=SMA_SHORT_WINDOW).mean()
-            # data_with_indicators['BB_StdDev'] = data_with_indicators['Close'].rolling(window=SMA_SHORT_WINDOW).std()
-            # data_with_indicators['BB_Upper'] = data_with_indicators['BB_Middle'] + (data_with_indicators['BB_StdDev'] * 2)
-            # data_with_indicators['BB_Lower'] = data_with_indicators['BB_Middle'] - (data_with_indicators['BB_StdDev'] * 2)
-            # st.line_chart(data_with_indicators[['Close', 'BB_Upper', 'BB_Lower', 'BB_Middle']])
-            st.info("Feature coming soon!")
+            st.write(f"**Bollinger Bands ({SMA_SHORT_WINDOW}-day, 2 Std Dev)**")
+            bb_cols = ['Close', f'BB_Upper_{SMA_SHORT_WINDOW}', f'BB_Middle_{SMA_SHORT_WINDOW}', f'BB_Lower_{SMA_SHORT_WINDOW}']
+            if all(col in data_with_indicators.columns for col in bb_cols):
+                # Ensure columns exist before trying to plot
+                st.line_chart(data_with_indicators[bb_cols])
+                st.caption(f"The Bollinger Bands show the {SMA_SHORT_WINDOW}-day moving average (middle band) "
+                           f"and two standard deviations above and below it (upper and lower bands). "
+                           "They can help identify periods of high or low volatility and potential overbought/oversold conditions.")
+            else:
+                st.info("Bollinger Bands data could not be calculated or is not available for the selected period/interval.")
 
         with st.expander("💰 Dividend Information"):
             if stock_info:
