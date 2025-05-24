@@ -479,7 +479,7 @@ if ticker:
             else:
                 st.info("Momentum data not available.")
 
-        with st.expander("📊 Price Volatility (Std Dev)"):
+        with st.expander("📊 Price Volatility (Std Dev)":
             if 'Close' in data_with_indicators.columns:
                 stddev = data_with_indicators['Close'].rolling(window=20).std().iloc[-1]
                 st.metric("20-Period Std Dev", f"{stddev:.2f}")
@@ -503,6 +503,228 @@ if ticker:
                 st.info("ESG score data not available.")
 
         # --- END NEW FEATURES ---
+
+        # --- 20 MORE NEW FEATURES BELOW ---
+        with st.expander("📈 Moving Average Crossover Signal"):
+            if 'Close' in data_with_indicators.columns:
+                short_ma = data_with_indicators[f'SMA_{SMA_SHORT_WINDOW}']
+                long_ma = data_with_indicators[f'SMA_{SMA_LONG_WINDOW}']
+                if not short_ma.isnull().all() and not long_ma.isnull().all():
+                    signal = "Bullish" if short_ma.iloc[-1] > long_ma.iloc[-1] else "Bearish"
+                    st.metric("MA Crossover Signal", signal)
+                else:
+                    st.info("Not enough data for MA crossover.")
+            else:
+                st.info("MA crossover data not available.")
+
+        with st.expander("📉 RSI Overbought/Oversold"):
+            if 'RSI' in data_with_indicators.columns:
+                rsi = data_with_indicators['RSI'].iloc[-1]
+                if rsi > 70:
+                    st.warning(f"RSI: {rsi:.2f} (Overbought)")
+                elif rsi < 30:
+                    st.success(f"RSI: {rsi:.2f} (Oversold)")
+                else:
+                    st.info(f"RSI: {rsi:.2f} (Neutral)")
+            else:
+                st.info("RSI data not available.")
+
+        with st.expander("🧲 MACD Crossover Signal"):
+            if 'MACD' in data_with_indicators.columns and 'MACD_signal' in data_with_indicators.columns:
+                macd = data_with_indicators['MACD'].iloc[-1]
+                macd_signal = data_with_indicators['MACD_signal'].iloc[-1]
+                signal = "Bullish" if macd > macd_signal else "Bearish"
+                st.metric("MACD Signal", signal)
+            else:
+                st.info("MACD data not available.")
+
+        with st.expander("📊 Price Change (%) Last 5 Periods"):
+            if 'Close' in data_with_indicators.columns:
+                changes = data_with_indicators['Close'].pct_change().tail(5) * 100
+                st.bar_chart(changes)
+            else:
+                st.info("Price change data not available.")
+
+        with st.expander("📈 Cumulative Returns"):
+            if 'Close' in data_with_indicators.columns:
+                cum_returns = (1 + data_with_indicators['Close'].pct_change()).cumprod() - 1
+                st.line_chart(cum_returns)
+            else:
+                st.info("Cumulative returns data not available.")
+
+        with st.expander("📉 Max Drawdown Value"):
+            if 'Close' in data_with_indicators.columns:
+                max_close = data_with_indicators['Close'].cummax()
+                drawdown = (data_with_indicators['Close'] - max_close) / max_close
+                st.metric("Max Drawdown (%)", f"{drawdown.min()*100:.2f}%")
+            else:
+                st.info("Drawdown value not available.")
+
+        with st.expander("📊 Sharpe Ratio (Simple)"):
+            if 'Close' in data_with_indicators.columns:
+                returns = data_with_indicators['Close'].pct_change().dropna()
+                if not returns.empty:
+                    sharpe = returns.mean() / returns.std() * (252**0.5)
+                    st.metric("Sharpe Ratio", f"{sharpe:.2f}")
+                else:
+                    st.info("Not enough data for Sharpe Ratio.")
+            else:
+                st.info("Sharpe Ratio data not available.")
+
+        with st.expander("📈 Rolling Volatility (30-period)"):
+            if 'Close' in data_with_indicators.columns:
+                rolling_vol = data_with_indicators['Close'].pct_change().rolling(30).std()
+                st.line_chart(rolling_vol)
+            else:
+                st.info("Rolling volatility data not available.")
+
+        with st.expander("📊 Beta vs S&P 500 (Simple)"):
+            try:
+                sp500 = yf.download("^GSPC", period=period, interval=interval, progress=False)
+                if not sp500.empty and 'Close' in sp500.columns and 'Close' in stock_data_raw.columns:
+                    returns_stock = stock_data_raw['Close'].pct_change().dropna()
+                    returns_sp = sp500['Close'].pct_change().dropna()
+                    aligned = pd.concat([returns_stock, returns_sp], axis=1).dropna()
+                    beta = aligned.iloc[:,0].cov(aligned.iloc[:,1]) / aligned.iloc[:,1].var()
+                    st.metric("Beta vs S&P 500", f"{beta:.2f}")
+                else:
+                    st.info("Could not compute beta.")
+            except Exception:
+                st.info("Could not fetch S&P 500 data for beta.")
+
+        with st.expander("📈 Price Gap (Open vs Previous Close)"):
+            if 'Open' in stock_data_raw.columns and 'Close' in stock_data_raw.columns:
+                prev_close = stock_data_raw['Close'].shift(1)
+                gap = stock_data_raw['Open'] - prev_close
+                st.bar_chart(gap.tail(10))
+            else:
+                st.info("Price gap data not available.")
+
+        with st.expander("📊 Average True Range (ATR)"):
+            if all(col in stock_data_raw.columns for col in ['High', 'Low', 'Close']):
+                high = stock_data_raw['High']
+                low = stock_data_raw['Low']
+                close = stock_data_raw['Close']
+                prev_close = close.shift(1)
+                tr = pd.concat([
+                    high - low,
+                    (high - prev_close).abs(),
+                    (low - prev_close).abs()
+                ], axis=1).max(axis=1)
+                atr = tr.rolling(window=14).mean()
+                st.line_chart(atr)
+            else:
+                st.info("ATR data not available.")
+
+        with st.expander("📈 Price Channel (Highest/Lowest 20)"):
+            if 'Close' in stock_data_raw.columns:
+                high20 = stock_data_raw['Close'].rolling(20).max()
+                low20 = stock_data_raw['Close'].rolling(20).min()
+                st.line_chart(pd.DataFrame({'High 20': high20, 'Low 20': low20}))
+            else:
+                st.info("Price channel data not available.")
+
+        with st.expander("📊 Volume Spike Detector"):
+            if 'Volume' in stock_data_raw.columns:
+                avg_vol = stock_data_raw['Volume'].rolling(20).mean()
+                spikes = stock_data_raw['Volume'] > 2 * avg_vol
+                st.write("Recent Volume Spikes (True = Spike):")
+                st.dataframe(spikes.tail(10))
+            else:
+                st.info("Volume spike data not available.")
+
+        with st.expander("📈 Price Momentum (3, 6, 12 months)"):
+            if 'Close' in stock_data_raw.columns:
+                for months in [3, 6, 12]:
+                    try:
+                        pct = stock_data_raw['Close'].pct_change(periods=int(months*21)).iloc[-1]*100
+                        st.metric(f"{months}M Momentum (%)", f"{pct:.2f}%")
+                    except Exception:
+                        st.info(f"Not enough data for {months}M momentum.")
+            else:
+                st.info("Momentum data not available.")
+
+        with st.expander("📊 Skewness & Kurtosis of Returns"):
+            if 'Close' in stock_data_raw.columns:
+                returns = stock_data_raw['Close'].pct_change().dropna()
+                st.metric("Skewness", f"{returns.skew():.2f}")
+                st.metric("Kurtosis", f"{returns.kurtosis():.2f}")
+            else:
+                st.info("Skewness/kurtosis data not available.")
+
+        with st.expander("📈 Price Above/Below SMA"):
+            if 'Close' in data_with_indicators.columns and f'SMA_{SMA_LONG_WINDOW}' in data_with_indicators.columns:
+                above = data_with_indicators['Close'].iloc[-1] > data_with_indicators[f'SMA_{SMA_LONG_WINDOW}'].iloc[-1]
+                st.metric("Price Above 50-SMA", "Yes" if above else "No")
+            else:
+                st.info("SMA comparison data not available.")
+
+        with st.expander("📉 Downside Deviation (Risk)"):
+            if 'Close' in stock_data_raw.columns:
+                returns = stock_data_raw['Close'].pct_change().dropna()
+                downside = returns[returns < 0]
+                if not downside.empty:
+                    downside_dev = downside.std() * (252**0.5)
+                    st.metric("Downside Deviation", f"{downside_dev:.4f}")
+                else:
+                    st.info("No downside returns for deviation.")
+            else:
+                st.info("Downside deviation data not available.")
+
+        with st.expander("📊 Rolling Correlation with S&P 500"):
+            try:
+                sp500 = yf.download("^GSPC", period=period, interval=interval, progress=False)
+                if not sp500.empty and 'Close' in sp500.columns and 'Close' in stock_data_raw.columns:
+                    returns_stock = stock_data_raw['Close'].pct_change()
+                    returns_sp = sp500['Close'].pct_change()
+                    rolling_corr = returns_stock.rolling(30).corr(returns_sp)
+                    st.line_chart(rolling_corr)
+                else:
+                    st.info("Could not compute rolling correlation.")
+            except Exception:
+                st.info("Could not fetch S&P 500 data for rolling correlation.")
+
+        with st.expander("📈 Price/Volume Heatmap (Last 30)"):
+            if 'Close' in stock_data_raw.columns and 'Volume' in stock_data_raw.columns:
+                heatmap_df = pd.DataFrame({
+                    'Close': stock_data_raw['Close'].tail(30),
+                    'Volume': stock_data_raw['Volume'].tail(30)
+                })
+                st.dataframe(heatmap_df.style.background_gradient(cmap='Blues'))
+            else:
+                st.info("Price/volume heatmap data not available.")
+
+        with st.expander("📊 Dividend Growth (5Y CAGR)"):
+            if stock_info and 'dividendRate' in stock_info and 'fiveYearAvgDividendYield' in stock_info:
+                try:
+                    start_yield = stock_info['fiveYearAvgDividendYield']
+                    end_yield = stock_info['dividendYield']
+                    if start_yield and end_yield:
+                        cagr = ((end_yield/start_yield)**(1/5)-1)*100
+                        st.metric("5Y Dividend CAGR (%)", f"{cagr:.2f}%")
+                    else:
+                        st.info("Not enough data for dividend CAGR.")
+                except Exception:
+                    st.info("Error calculating dividend CAGR.")
+            else:
+                st.info("Dividend CAGR data not available.")
+
+        with st.expander("📈 Price Volatility Bands (10/30/60)"):
+            if 'Close' in stock_data_raw.columns:
+                for window in [10, 30, 60]:
+                    std = stock_data_raw['Close'].rolling(window).std().iloc[-1]
+                    st.metric(f"{window}-Period Volatility", f"{std:.2f}")
+            else:
+                st.info("Volatility bands data not available.")
+
+        with st.expander("📊 Price/Volume Correlation"):
+            if 'Close' in stock_data_raw.columns and 'Volume' in stock_data_raw.columns:
+                corr = stock_data_raw['Close'].corr(stock_data_raw['Volume'])
+                st.metric("Price/Volume Correlation", f"{corr:.2f}")
+            else:
+                st.info("Price/volume correlation data not available.")
+
+        # --- END 20 NEW FEATURES ---
 
         with st.expander("🏢 Company Profile"):
             if stock_info:
