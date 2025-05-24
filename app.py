@@ -275,18 +275,10 @@ with st.expander("📚 Stock Market Flashcards"):
     card_index = st.session_state.get('card_index', 0)
     card = flashcards[card_index % len(flashcards)]
 
-    col1, col2, col3 = st.columns([1,3,1])
-    with col1:
-        if st.button("Previous ◀️", key="prev_card"):
-            st.session_state['card_index'] = (card_index - 1) % len(flashcards)
-            st.experimental_rerun()
-    with col2:
-        st.subheader(card["term"])
-        st.write(card["definition"])
-    with col3:
-        if st.button("Next ▶️", key="next_card"):
-            st.session_state['card_index'] = (card_index + 1) % len(flashcards)
-            st.experimental_rerun()
+    # Display the current (first) flashcard
+    # The navigation buttons have been removed.
+    st.subheader(card["term"])
+    st.write(card["definition"])
 
 # Fetch stock data
 @st.cache_data
