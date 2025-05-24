@@ -813,10 +813,69 @@ if ticker:
                 st.info("Rolling volatility data not available or insufficient data. ⚠️")
             st.markdown("---")
 
-            # Note: Beta vs S&P 500, Price Gap, Price Momentum (3,6,12M), Skewness & Kurtosis,
-            # Downside Deviation, Rolling Correlation, Price/Volume Correlation
-            # would continue here following the same pattern.
-            # For brevity, I'll stop here, but you would continue adding the rest of the tools.
+            st.subheader("Beta vs S&P 500 (Simple)")
+            try:
+                sp500_beta = yf.download("^GSPC", period=period, interval=interval, progress=False)
+                if not sp500_beta.empty and 'Close' in sp500_beta.columns and 'Close' in stock_data_raw.columns:
+                    returns_stock_beta = stock_data_raw['Close'].pct_change().dropna()
+                    returns_sp_beta = sp500_beta['Close'].pct_change().dropna()
+                    # Align data by index
+                    aligned_returns = pd.concat([returns_stock_beta, returns_sp_beta], axis=1, join='inner').dropna()
+                    if len(aligned_returns) > 1: # Need at least 2 data points for covariance/variance
+                        beta = aligned_returns.iloc[:,0].cov(aligned_returns.iloc[:,1]) / aligned_returns.iloc[:,1].var() if aligned_returns.iloc[:,1].var() != 0 else 0
+                        st.metric("Beta vs S&P 500", f"{beta:.2f}")
+                    else:
+                        st.info("Not enough aligned data points to compute beta. ⚠️")
+                else:
+                    st.info("Could not compute beta (missing S&P 500 or stock data). ⚠️")
+            except Exception as e_beta:
+                st.info(f"Could not fetch S&P 500 data for beta: {e_beta} ⚠️")
+            st.markdown("---")
+
+            st.subheader("Price Momentum (3, 6, 12 months)")
+            if 'Close' in stock_data_raw.columns:
+                for months_momentum in [3, 6, 12]:
+                    try:
+                        # Approximate periods per month
+                        periods_in_month_map = {'1d': 21, '1wk': 4, '1mo': 1, '1h': 21*6.5, '15m': 21*6.5*4} # Approx for trading days/hours
+                        periods_to_shift = int(months_momentum * periods_in_month_map.get(interval, 21)) # Default to daily if interval unknown
+                        
+                        if len(stock_data_raw['Close']) > periods_to_shift:
+                            pct_momentum = stock_data_raw['Close'].pct_change(periods=periods_to_shift).iloc[-1]*100
+                            st.metric(f"{months_momentum}M Momentum (%)", f"{pct_momentum:.2f}%")
+                        else:
+                            st.info(f"Not enough data for {months_momentum}M momentum with {periods_to_shift} periods for interval '{interval}'. ⚠️")
+                    except Exception as e_mom:
+                        st.info(f"Error calculating {months_momentum}M momentum: {e_mom} ⚠️")
+            else:
+                st.info("Momentum data not available (Close prices missing). ⚠️")
+            st.markdown("---")
+
+            st.subheader("Downside Deviation (Risk - Annualized)")
+            if 'Close' in stock_data_raw.columns:
+                returns_dd = stock_data_raw['Close'].pct_change().dropna()
+                downside_returns = returns_dd[returns_dd < 0]
+                if not downside_returns.empty:
+                    # Annualization factor (approximate)
+                    annual_factor_dd = (252 if interval == '1d' else (52 if interval == '1wk' else (12 if interval == '1mo' else 1)))**0.5
+                    downside_dev = downside_returns.std() * annual_factor_dd if downside_returns.std() != 0 else 0
+                    st.metric("Downside Deviation (Annualized)", f"{downside_dev:.4f}")
+                else:
+                    st.info("No downside returns recorded in the period for deviation calculation. ✅") 
+            else:
+                st.info("Downside deviation data not available (Close prices missing). ⚠️")
+            st.markdown("---")
+
+            st.subheader("Price/Volume Correlation")
+            if 'Close' in stock_data_raw.columns and 'Volume' in stock_data_raw.columns:
+                if len(stock_data_raw) > 1: # Correlation needs at least 2 points
+                    corr_pv = stock_data_raw['Close'].corr(stock_data_raw['Volume'])
+                    st.metric("Price/Volume Correlation", f"{corr_pv:.2f}")
+                else:
+                    st.info("Not enough data for Price/Volume Correlation. ⚠️")
+            else:
+                st.info("Price/volume correlation data not available (Close or Volume missing). ⚠️")
+
 
         # --- Consolidated Expander 5: Market Pulse & Company Intel ---
         with st.expander("📰 Market Pulse & Company Intel"):
@@ -1032,6 +1091,49 @@ if ticker:
                 st.dataframe(heatmap_df.style.background_gradient(cmap='viridis'))
             else:
                 st.info("Price/volume heatmap data not available. ⚠️")
+
+        # --- NEW Consolidated Expander 7: Statistical Deep Dive & Relationships ---
+        with st.expander("🔬 Statistical Deep Dive & Relationships"):
+            st.subheader("Skewness & Kurtosis of Returns")
+            if 'Close' in stock_data_raw.columns:
+                returns_stats = stock_data_raw['Close'].pct_change().dropna()
+                if not returns_stats.empty:
+                    st.metric("Skewness of Returns", f"{returns_stats.skew():.2f}")
+                    st.metric("Kurtosis of Returns", f"{returns_stats.kurtosis():.2f}")
+                    st.caption("Skewness measures asymmetry; Kurtosis measures 'tailedness' of the distribution.")
+                else:
+                    st.info("Not enough data for Skewness/Kurtosis. ⚠️")
+            else:
+                st.info("Skewness/Kurtosis data not available (Close prices missing). ⚠️")
+            st.markdown("---")
+
+            st.subheader("Rolling Correlation with S&P 500 (30-period)")
+            try:
+                sp500_roll_corr = yf.download("^GSPC", period=period, interval=interval, progress=False)
+                if not sp500_roll_corr.empty and 'Close' in sp500_roll_corr.columns and 'Close' in stock_data_raw.columns:
+                    returns_stock_roll = stock_data_raw['Close'].pct_change()
+                    returns_sp_roll = sp500_roll_corr['Close'].pct_change()
+                    if len(returns_stock_roll) > 30 and len(returns_sp_roll) > 30: # Ensure enough data for rolling window
+                        rolling_corr = returns_stock_roll.rolling(30).corr(returns_sp_roll)
+                        st.line_chart(rolling_corr)
+                        st.caption("Shows the 30-period rolling correlation between the stock's returns and S&P 500 returns.")
+                    else:
+                        st.info("Not enough data for 30-period rolling correlation. ⚠️")
+                else:
+                    st.info("Could not compute rolling correlation (missing S&P 500 or stock data). ⚠️")
+            except Exception as e_roll_corr:
+                st.info(f"Could not fetch S&P 500 data for rolling correlation: {e_roll_corr} ⚠️")
+            st.markdown("---")
+
+            st.subheader("Price Gap (Open vs Previous Close)")
+            if 'Open' in stock_data_raw.columns and 'Close' in stock_data_raw.columns:
+                if len(stock_data_raw) > 1:
+                    prev_close_gap = stock_data_raw['Close'].shift(1)
+                    gap = stock_data_raw['Open'] - prev_close_gap
+                    st.bar_chart(gap.tail(20)) # Show last 20 gaps
+                    st.caption("Shows the difference between the current period's open and the previous period's close.")
+                else: st.info("Not enough data for Price Gap analysis. ⚠️")
+            else: st.info("Price gap data not available (Open or Close prices missing). ⚠️")
 
         st.subheader("📥 Download Processed Data")
         csv_data = data_with_indicators.to_csv().encode('utf-8')
